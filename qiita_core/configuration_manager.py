@@ -10,6 +10,9 @@ from functools import partial
 from os.path import join, dirname, abspath, isdir
 from os import environ
 from future import standard_library
+from base64 import b64encode
+from uuid import uuid4
+import warnings
 
 from .exceptions import MissingConfigSection
 
@@ -105,6 +108,10 @@ class ConfigurationManager(object):
         The VAMPS URL
     conf_fp : str
         The filepath for the configuration file that is loaded
+    portal : str
+        The portal under the Qiita instance is running under
+    portal_dir : str
+        The portal subdirectory used in the URL
     portal_fp : str
         The filepath to the portal styling config file
     plugin_launcher : str
@@ -161,7 +168,6 @@ class ConfigurationManager(object):
                              self.working_dir)
         self.max_upload_size = config.getint('main', 'MAX_UPLOAD_SIZE')
         self.require_approval = config.getboolean('main', 'REQUIRE_APPROVAL')
-        self.portal = config.get('main', 'PORTAL')
         self.plugin_launcher = config.get('main', 'PLUGIN_LAUNCHER')
 
         self.valid_upload_extension = [ve.strip() for ve in config.get(
@@ -175,6 +181,12 @@ class ConfigurationManager(object):
         if not self.certificate_file:
             self.certificate_file = join(install_dir, 'qiita_core',
                                          'support_files', 'server.crt')
+
+        self.cookie_secret = config.get('main', 'COOKIE_SECRET')
+        if not self.cookie_secret:
+            self.cookie_secret = b64encode(uuid4().bytes + uuid4().bytes)
+            warnings.warn("Random cookie secret generated.")
+
         self.key_file = config.get('main', 'KEY_FILE')
         if not self.key_file:
             self.key_file = join(install_dir, 'qiita_core', 'support_files',
@@ -240,3 +252,12 @@ class ConfigurationManager(object):
 
     def _get_portal(self, config):
         self.portal_fp = config.get('portal', 'PORTAL_FP')
+        self.portal = config.get('portal', 'PORTAL')
+        self.portal_dir = config.get('portal', 'PORTAL_DIR')
+        if self.portal_dir:
+            if not self.portal_dir.startswith('/'):
+                self.portal_dir = "/%s" % self.portal_dir
+            if self.portal_dir.endswith('/'):
+                self.portal_dir = self.portal_dir[:-1]
+        else:
+            self.portal_dir = ""

@@ -38,8 +38,6 @@ Methods
 from __future__ import division
 from future.utils import viewitems, viewvalues
 from future.builtins import zip
-from os.path import join
-from functools import partial
 from itertools import chain
 from copy import deepcopy
 
@@ -565,7 +563,8 @@ class MetadataTemplate(qdb.base.QiitaObject):
 
             if missing:
                 warning_msg.append(
-                    "%s: %s" % (restriction.error_msg, ', '.join(missing)))
+                    "%s: %s" % (restriction.error_msg,
+                                ', '.join(sorted(missing))))
 
         if warning_msg:
             warnings.warn(
@@ -714,7 +713,7 @@ class MetadataTemplate(qdb.base.QiitaObject):
             if new_cols:
                 warnings.warn(
                     "The following columns have been added to the existing"
-                    " template: %s" % ", ".join(new_cols),
+                    " template: %s" % ", ".join(sorted(new_cols)),
                     qdb.exceptions.QiitaDBWarning)
                 # If we are adding new columns, add them first (simplifies
                 # code). Sorting the new columns to enforce an order
@@ -1077,26 +1076,10 @@ class MetadataTemplate(qdb.base.QiitaObject):
     def get_filepaths(self):
         r"""Retrieves the list of (filepath_id, filepath)"""
         with qdb.sql_connection.TRN:
-            try:
-                sql = """SELECT filepath_id, filepath
-                         FROM qiita.filepath
-                         WHERE filepath_id IN (
-                            SELECT filepath_id FROM qiita.{0}
-                            WHERE {1}=%s)
-                         ORDER BY filepath_id DESC""".format(
-                    self._filepath_table, self._id_column)
-
-                qdb.sql_connection.TRN.add(sql, [self.id])
-                filepath_ids = qdb.sql_connection.TRN.execute_fetchindex()
-            except Exception as e:
-                qdb.logger.LogEntry.create(
-                    'Runtime', str(e), info={self.__class__.__name__: self.id})
-                raise e
-
-            _, fb = qdb.util.get_mountpoint('templates')[0]
-            base_fp = partial(join, fb)
-
-            return [(fpid, base_fp(fp)) for fpid, fp in filepath_ids]
+            return [(fp_id, fp)
+                    for fp_id, fp, _ in qdb.util.retrieve_filepaths(
+                        self._filepath_table, self._id_column, self.id,
+                        sort='descending')]
 
     def categories(self):
         """Identifies the metadata columns present in a template
@@ -1319,6 +1302,31 @@ class MetadataTemplate(qdb.base.QiitaObject):
                         % (category, value_str, value_types_str, column_type))
 
                 raise e
+
+    def get_category(self, category):
+        """Returns the values of all samples for the given category
+
+        Parameters
+        ----------
+        category : str
+            Metadata category to get information for
+
+        Returns
+        -------
+        dict
+            Sample metadata for the category in the form {sample_id: value}
+
+        Raises
+        ------
+        QiitaDBColumnError
+            If category is not part of the template
+        """
+        with qdb.sql_connection.TRN:
+            qdb.util.check_table_cols([category], self._table_name(self._id))
+            sql = 'SELECT sample_id, {0} FROM qiita.{1}'.format(
+                category, self._table_name(self._id))
+            qdb.sql_connection.TRN.add(sql)
+            return dict(qdb.sql_connection.TRN.execute_fetchindex())
 
     def check_restrictions(self, restrictions):
         """Checks if the template fulfills the restrictions

@@ -64,3 +64,57 @@ pubmed_linkifier = partial(
 
 doi_linkifier = partial(
     linkify, "<a target=\"_blank\" href=\"http://dx.doi.org/{0}\">{0}</a>")
+
+
+def to_int(value):
+    """Transforms `value` to an integer
+
+    Parameters
+    ----------
+    value : str or int
+        The value to transform
+
+    Returns
+    -------
+    int
+        `value` as an integer
+
+    Raises
+    ------
+    HTTPError
+        If `value` cannot be transformed to an integer
+    """
+    try:
+        res = int(value)
+    except ValueError:
+        raise HTTPError(400, "%s cannot be converted to an integer" % value)
+    return res
+
+
+@execute_as_transaction
+def get_shared_links(obj):
+    """Creates email links for the users obj is shared with
+
+    Parameters
+    ----------
+    obj : QiitaObject
+        A qiita object with a 'shared_with' property that returns a list of
+        User objects
+
+    Returns
+    -------
+    str
+        Email links for each person obj is shared with
+    """
+    shared = []
+    for person in obj.shared_with:
+        name = person.info['name']
+        email = person.email
+        # Name is optional, so default to email if non existant
+        if name:
+            shared.append(study_person_linkifier(
+                (email, name)))
+        else:
+            shared.append(study_person_linkifier(
+                (email, email)))
+    return ", ".join(shared)

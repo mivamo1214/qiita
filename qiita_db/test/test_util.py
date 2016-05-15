@@ -77,7 +77,7 @@ class DBUtilTests(TestCase):
         self.assertTrue(qdb.util.exists_table("sample_1"))
         # False cases
         self.assertFalse(qdb.util.exists_table("sample_2"))
-        self.assertFalse(qdb.util.exists_table("prep_2"))
+        self.assertFalse(qdb.util.exists_table("prep_3"))
         self.assertFalse(qdb.util.exists_table("foo_table"))
         self.assertFalse(qdb.util.exists_table("bar_table"))
 
@@ -240,6 +240,46 @@ class DBUtilTests(TestCase):
                 "raw_barcodes")]
         self.assertEqual(obs, exp)
 
+    def test_retrieve_filepaths_sort(self):
+        obs = qdb.util.retrieve_filepaths(
+            'artifact_filepath', 'artifact_id', 1, sort='descending')
+        path_builder = partial(
+            join, qdb.util.get_db_files_base_dir(), "raw_data")
+        exp = [(2, path_builder("1_s_G1_L001_sequences_barcodes.fastq.gz"),
+                "raw_barcodes"),
+               (1, path_builder("1_s_G1_L001_sequences.fastq.gz"),
+                "raw_forward_seqs")]
+        self.assertEqual(obs, exp)
+
+    def test_retrieve_filepaths_type(self):
+        obs = qdb.util.retrieve_filepaths(
+            'artifact_filepath', 'artifact_id', 1, sort='descending',
+            fp_type='raw_barcodes')
+        path_builder = partial(
+            join, qdb.util.get_db_files_base_dir(), "raw_data")
+        exp = [(2, path_builder("1_s_G1_L001_sequences_barcodes.fastq.gz"),
+                "raw_barcodes")]
+        self.assertEqual(obs, exp)
+
+        obs = qdb.util.retrieve_filepaths(
+            'artifact_filepath', 'artifact_id', 1, fp_type='raw_barcodes')
+        path_builder = partial(
+            join, qdb.util.get_db_files_base_dir(), "raw_data")
+        exp = [(2, path_builder("1_s_G1_L001_sequences_barcodes.fastq.gz"),
+                "raw_barcodes")]
+        self.assertEqual(obs, exp)
+
+        obs = qdb.util.retrieve_filepaths(
+            'artifact_filepath', 'artifact_id', 1, fp_type='biom')
+        path_builder = partial(
+            join, qdb.util.get_db_files_base_dir(), "raw_data")
+        self.assertEqual(obs, [])
+
+    def test_retrieve_filepaths_error(self):
+        with self.assertRaises(qdb.exceptions.QiitaDBError):
+            qdb.util.retrieve_filepaths('artifact_filepath', 'artifact_id', 1,
+                                        sort='Unknown')
+
     def _common_purge_filpeaths_test(self):
         # Get all the filepaths so we can test if they've been removed or not
         sql_fp = "SELECT filepath, data_directory_id FROM qiita.filepath"
@@ -325,6 +365,8 @@ class DBUtilTests(TestCase):
         # files
         fd, seqs_fp = mkstemp(suffix='_seqs.fastq')
         close(fd)
+        fd, html_fp = mkstemp(suffix='.html')
+        close(fd)
         st = qdb.study.Study(1)
         metadata_dict = {
             'SKB8.640193': {'center_name': 'ANL',
@@ -340,7 +382,8 @@ class DBUtilTests(TestCase):
             metadata, qdb.study.Study(1), "16S")
 
         artifact = qdb.artifact.Artifact.create(
-            [(seqs_fp, 1)], "FASTQ", prep_template=pt)
+            [(seqs_fp, 1), (html_fp, 'html_summary')], "FASTQ",
+            prep_template=pt)
         filepaths = artifact.filepaths
         # deleting reference so we can directly call
         # move_filepaths_to_upload_folder
@@ -354,10 +397,14 @@ class DBUtilTests(TestCase):
         # check that they do not exist in the old path but do in the new one
         path_for_removal = join(qdb.util.get_mountpoint("uploads")[0][1],
                                 str(st.id))
-        for _, fp, _ in filepaths:
+        for _, fp, fp_type in filepaths:
             self.assertFalse(exists(fp))
             new_fp = join(path_for_removal, basename(fp))
-            self.assertTrue(exists(new_fp))
+            if fp_type == 'html_summary':
+                # The html summary gets removed, not moved
+                self.assertFalse(exists(new_fp))
+            else:
+                self.assertTrue(exists(new_fp))
 
             self.files_to_remove.append(new_fp)
 
@@ -599,7 +646,7 @@ class DBUtilTests(TestCase):
     def test_check_access_to_analysis_result(self):
         obs = qdb.util.check_access_to_analysis_result('test@foo.bar',
                                                        '1_job_result.txt')
-        exp = [10]
+        exp = [13]
 
         self.assertEqual(obs, exp)
 
@@ -658,6 +705,16 @@ class DBUtilTests(TestCase):
         # Run again with no system messages to make sure no errors
         qdb.util.clear_system_messages()
 
+    def test_supported_filepath_types(self):
+        obs = qdb.util.supported_filepath_types("FASTQ")
+        exp = [["raw_forward_seqs", True], ["raw_reverse_seqs", False],
+               ["raw_barcodes", True]]
+        self.assertItemsEqual(obs, exp)
+
+        obs = qdb.util.supported_filepath_types("BIOM")
+        exp = [["biom", True], ["directory", False], ["log", False]]
+        self.assertItemsEqual(obs, exp)
+
 
 class UtilTests(TestCase):
     """Tests for the util functions that do not need to access the DB"""
@@ -687,6 +744,11 @@ class UtilTests(TestCase):
         """Correctly removes single quotes from the string"""
         self.assertEqual(qdb.util.scrub_data("'quotes'"), "quotes")
 
+    def test_get_visibilities(self):
+        obs = qdb.util.get_visibilities()
+        exp = ['awaiting_approval', 'sandbox', 'private', 'public']
+        self.assertEqual(obs, exp)
+
     def test_infer_status(self):
         obs = qdb.util.infer_status([])
         self.assertEqual(obs, 'sandbox')
@@ -707,6 +769,122 @@ class UtilTests(TestCase):
         exp = {'10.100/123456': '123456'}
         obs = qdb.util.get_pubmed_ids_from_dois(['', '10.100/123456'])
         self.assertEqual(obs, exp)
+
+    def test_generate_study_list(self):
+        exp_info = [{
+            'metadata_complete': True,
+            'ebi_submission_status': 'submitted',
+            'shared': [('shared@foo.bar', 'Shared')],
+            'pmid': ['7891011', '123456'],
+            'pi': ('PI_dude@foo.bar', 'PIDude'),
+            'status': 'private',
+            'proc_data_info': [],
+            'publication_doi': ['10.100/123456', '10.100/7891011'],
+            'study_abstract': (
+                'This is a preliminary study to examine the microbiota '
+                'associated with the Cannabis plant. Soils samples from '
+                'the bulk soil, soil associated with the roots, and the '
+                'rhizosphere were extracted and the DNA sequenced. Roots '
+                'from three independent plants of different strains were '
+                'examined. These roots were obtained November 11, 2011 from '
+                'plants that had been harvested in the summer. Future studies '
+                'will attempt to analyze the soils and rhizospheres from the '
+                'same location at different time points in the plant '
+                'lifecycle.'),
+            'study_id': 1,
+            'ebi_study_accession': 'EBI123456-BB',
+            'study_title': ('Identification of the Microbiomes for Cannabis '
+                            'Soils'),
+            'number_samples_collected': 27
+        }]
+        obs_info = qdb.util.generate_study_list([1, 2, 3, 4], False)
+        self.assertEqual(obs_info, exp_info)
+
+        exp_info[0]['proc_data_info'] = [
+            {'sortmerna_e_value': 1,
+             'tree_filepath': 'GreenGenes_13_8_97_otus.tree',
+             'algorithm': 'sortmerna',
+             'data_type': '18S',
+             'similarity': 0.97,
+             'reference_name': 'Greengenes',
+             'taxonomy_filepath': 'GreenGenes_13_8_97_otu_taxonomy.txt',
+             'pid': 4,
+             'sortmerna_max_pos': 10000,
+             'processed_date': '2012-10-02 17:30:00',
+             'threads': 1,
+             'samples': ['1.SKB1.640202', '1.SKB2.640194', '1.SKB3.640195',
+                         '1.SKB4.640189', '1.SKB5.640181', '1.SKB6.640176',
+                         '1.SKB7.640196', '1.SKB8.640193', '1.SKB9.640200',
+                         '1.SKD1.640179', '1.SKD2.640178', '1.SKD3.640198',
+                         '1.SKD4.640185', '1.SKD5.640186', '1.SKD6.640190',
+                         '1.SKD7.640191', '1.SKD8.640184', '1.SKD9.640182',
+                         '1.SKM1.640183', '1.SKM2.640199', '1.SKM3.640197',
+                         '1.SKM4.640180', '1.SKM5.640177', '1.SKM6.640187',
+                         '1.SKM7.640188', '1.SKM8.640201', '1.SKM9.640192'],
+             'sortmerna_coverage': 0.97,
+             'sequence_filepath': 'GreenGenes_13_8_97_otus.fasta',
+             'reference_version': '13_8'},
+            {'sortmerna_e_value': 1,
+             'tree_filepath': 'GreenGenes_13_8_97_otus.tree',
+             'algorithm': 'sortmerna',
+             'data_type': '18S',
+             'similarity': 0.97,
+             'reference_name': 'Greengenes',
+             'taxonomy_filepath': 'GreenGenes_13_8_97_otu_taxonomy.txt',
+             'pid': 5,
+             'sortmerna_max_pos': 10000,
+             'processed_date': '2012-10-02 17:30:00',
+             'threads': 1,
+             'samples': ['1.SKB1.640202', '1.SKB2.640194', '1.SKB3.640195',
+                         '1.SKB4.640189', '1.SKB5.640181', '1.SKB6.640176',
+                         '1.SKB7.640196', '1.SKB8.640193', '1.SKB9.640200',
+                         '1.SKD1.640179', '1.SKD2.640178', '1.SKD3.640198',
+                         '1.SKD4.640185', '1.SKD5.640186', '1.SKD6.640190',
+                         '1.SKD7.640191', '1.SKD8.640184', '1.SKD9.640182',
+                         '1.SKM1.640183', '1.SKM2.640199', '1.SKM3.640197',
+                         '1.SKM4.640180', '1.SKM5.640177', '1.SKM6.640187',
+                         '1.SKM7.640188', '1.SKM8.640201', '1.SKM9.640192'],
+             'sortmerna_coverage': 0.97,
+             'sequence_filepath': 'GreenGenes_13_8_97_otus.fasta',
+             'reference_version': '13_8'},
+            {'sortmerna_e_value': 1,
+             'tree_filepath': '',
+             'algorithm': 'sortmerna',
+             'data_type': '16S',
+             'similarity': 0.97,
+             'reference_name': 'Silva',
+             'taxonomy_filepath': 'Silva_97_otu_taxonomy.txt',
+             'pid': 6,
+             'sortmerna_max_pos': 10000,
+             'processed_date': '2012-10-02 17:30:00',
+             'threads': 1,
+             'samples': ['1.SKB1.640202', '1.SKB2.640194', '1.SKB3.640195',
+                         '1.SKB4.640189', '1.SKB5.640181', '1.SKB6.640176',
+                         '1.SKB7.640196', '1.SKB8.640193', '1.SKB9.640200',
+                         '1.SKD1.640179', '1.SKD2.640178', '1.SKD3.640198',
+                         '1.SKD4.640185', '1.SKD5.640186', '1.SKD6.640190',
+                         '1.SKD7.640191', '1.SKD8.640184', '1.SKD9.640182',
+                         '1.SKM1.640183', '1.SKM2.640199', '1.SKM3.640197',
+                         '1.SKM4.640180', '1.SKM5.640177', '1.SKM6.640187',
+                         '1.SKM7.640188', '1.SKM8.640201', '1.SKM9.640192'],
+             'sortmerna_coverage': 0.97,
+             'sequence_filepath': 'Silva_97_otus.fasta',
+             'reference_version': 'test'},
+            {'processed_date': '2012-10-02 17:30:00',
+             'pid': 7,
+             'samples': ['1.SKB1.640202', '1.SKB2.640194', '1.SKB3.640195',
+                         '1.SKB4.640189', '1.SKB5.640181', '1.SKB6.640176',
+                         '1.SKB7.640196', '1.SKB8.640193', '1.SKB9.640200',
+                         '1.SKD1.640179', '1.SKD2.640178', '1.SKD3.640198',
+                         '1.SKD4.640185', '1.SKD5.640186', '1.SKD6.640190',
+                         '1.SKD7.640191', '1.SKD8.640184', '1.SKD9.640182',
+                         '1.SKM1.640183', '1.SKM2.640199', '1.SKM3.640197',
+                         '1.SKM4.640180', '1.SKM5.640177', '1.SKM6.640187',
+                         '1.SKM7.640188', '1.SKM8.640201', '1.SKM9.640192'],
+             'data_type': '16S'}]
+
+        obs_info = qdb.util.generate_study_list([1, 2, 3, 4], True)
+        self.assertEqual(obs_info, exp_info)
 
 
 if __name__ == '__main__':

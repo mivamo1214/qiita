@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # -----------------------------------------------------------------------------
 # Copyright (c) 2014--, The Qiita Development Team.
 #
@@ -13,8 +15,8 @@ from os import remove, close
 from tempfile import mkdtemp, mkstemp
 
 import httpretty
+from qiita_client import QiitaClient
 
-from tgp.qiita_client import QiitaClient
 from tgp.split_libraries.util import (
     get_artifact_information, split_mapping_file, generate_demux_file,
     generate_artifact_info)
@@ -29,7 +31,8 @@ class UtilTests(TestCase):
             body='{"access_token": "token", "token_type": "Bearer", '
                  '"expires_in": "3600"}')
 
-        self.qclient = QiitaClient("https://test_server.com")
+        self.qclient = QiitaClient("https://test_server.com", 'client_id',
+                                   'client_secret')
         self._clean_up_files = []
 
     def tearDown(self):
@@ -47,17 +50,15 @@ class UtilTests(TestCase):
             httpretty.GET,
             "https://test_server.com/qiita_db/artifacts/1/filepaths/",
             body='{"filepaths": [["forward_seqs.fastq.gz", "raw_forward_seqs"]'
-                 ', ["barcodes.fastq.gz", "raw_barcodes"]], "success": true, '
-                 '"error": ""}')
+                 ', ["barcodes.fastq.gz", "raw_barcodes"]]}')
         httpretty.register_uri(
             httpretty.GET,
             "https://test_server.com/qiita_db/artifacts/1/mapping/",
-            body='{"mapping": "mapping_file.txt", "success": true, '
-                 '"error": ""}')
+            body='{"mapping": "mapping_file.txt"}')
         httpretty.register_uri(
             httpretty.GET,
             "https://test_server.com/qiita_db/artifacts/1/type/",
-            body='{"type": "FASTQ", "success": true, "error": ""}')
+            body='{"type": "FASTQ"}')
 
         obs_fps, obs_mf, obs_at = get_artifact_information(self.qclient, 1)
 
@@ -66,17 +67,6 @@ class UtilTests(TestCase):
         self.assertEqual(obs_fps, exp_fps)
         self.assertEqual(obs_mf, "mapping_file.txt")
         self.assertEqual(obs_at, "FASTQ")
-
-    @httpretty.activate
-    def test_get_artifact_error(self):
-        # Mock the URIs
-        httpretty.register_uri(
-            httpretty.GET,
-            "https://test_server.com/qiita_db/artifacts/1/filepaths/",
-            body='{"filepaths": '', "success": false, "error": "some error"}')
-
-        with self.assertRaises(ValueError):
-            get_artifact_information(self.qclient, 1)
 
     def test_split_mapping_file_single(self):
         out_dir = mkdtemp()
@@ -133,13 +123,22 @@ class UtilTests(TestCase):
         with self.assertRaises(ValueError):
             generate_demux_file(out_dir)
 
+    def test_generate_demux_file_empty(self):
+        out_dir = mkdtemp()
+        self._clean_up_files.append(out_dir)
+        with open(join(out_dir, 'seqs.fastq'), "w") as f:
+            f.write('')
+
+        with self.assertRaises(ValueError):
+            generate_demux_file(out_dir)
+
     def test_generate_artifact_info(self):
         obs = generate_artifact_info("/sl/output/")
         fps = [("/sl/output/seqs.fna", "preprocessed_fasta"),
                ("/sl/output/seqs.fastq", "preprocessed_fastq"),
                ("/sl/output/seqs.demux", "preprocessed_demux"),
                ("/sl/output/split_library_log.txt", "log")]
-        exp = [['Demultiplexed', fps, True, True]]
+        exp = [['demultiplexed', 'Demultiplexed', fps]]
         self.assertEqual(obs, exp)
 
 
@@ -166,20 +165,20 @@ MAPPING_FILE_SINGLE = (
 MAPPING_FILE_MULT = (
     "#SampleID\tBarcodeSequence\tLinkerPrimerSequence\trun_prefix\t"
     "Description\n"
-    "Sample1\tGTCCGCAAGTTA\tGTGCCAGCMGCCGCGGTAA\tprefix_1\tTGP test\n"
-    "Sample2\tCGTAGAGCTCTC\tGTGCCAGCMGCCGCGGTAA\tprefix_2\tTGP test\n"
+    "Sample1\tGTCCGCAAGTTA\tGTGCCAGCMGCCGCGGTAA\tprefix_1\tTGP øtest\n"
+    "Sample2\tCGTAGAGCTCTC\tGTGCCAGCMGCCGCGGTAA\tprefix_2\tTGP øtest\n"
 )
 
 EXP_MAPPING_FILE_1 = (
     "#SampleID\tBarcodeSequence\tLinkerPrimerSequence\trun_prefix\t"
     "Description\n"
-    "Sample1\tGTCCGCAAGTTA\tGTGCCAGCMGCCGCGGTAA\tprefix_1\tTGP test\n"
+    "Sample1\tGTCCGCAAGTTA\tGTGCCAGCMGCCGCGGTAA\tprefix_1\tTGP øtest\n"
 )
 
 EXP_MAPPING_FILE_2 = (
     "#SampleID\tBarcodeSequence\tLinkerPrimerSequence\trun_prefix\t"
     "Description\n"
-    "Sample2\tCGTAGAGCTCTC\tGTGCCAGCMGCCGCGGTAA\tprefix_2\tTGP test\n"
+    "Sample2\tCGTAGAGCTCTC\tGTGCCAGCMGCCGCGGTAA\tprefix_2\tTGP øtest\n"
 )
 
 if __name__ == '__main__':

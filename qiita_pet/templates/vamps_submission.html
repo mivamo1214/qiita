@@ -3,7 +3,7 @@
 
 <h1>Submission summary for study: <b>{{study_title}}</b></h1>
 
-<form role="form" action="/vamps/{{preprocessed_data_id}}" method="post">
+<form role="form" action="{% raw qiita_config.portal_dir %}/vamps/{{preprocessed_data_id}}" method="post">
     <div class="panel panel-default">
         <div class="panel-heading">
             The information below describes information contained in the sample
@@ -23,10 +23,18 @@
         {% end %}
         </table>
     </div>
-    {% if level != 'danger' and maintenance is None  %}
-      <input type="submit" class="btn btn-primary" value="Submit to VAMPS">
-    {% end %}
+    The investigation type is: <b>{{investigation_type}}</b>
     <br/><br/>
-    <a class="btn btn-primary" href="/study/description/{{study_id}}?top_tab=preprocessed_data_tab&sub_tab={{preprocessed_data_id}}">Return to study</a>
+
+    {% if level != 'danger' and maintenance is None %}
+      {% if allow_submission %}
+        <input type="submit" class="btn btn-primary" value="Submit to VAMPS">
+      {% else %}
+        <b>{% raw disabled_msg %}
+      {% end %}
+    {% end %}
+
+    <br/><br/>
+    <a class="btn btn-primary" href="{% raw qiita_config.portal_dir %}/study/description/{{study_id}}?top_tab=preprocessed_data_tab&sub_tab={{preprocessed_data_id}}">Return to study</a>
 </form>
 {% end %}

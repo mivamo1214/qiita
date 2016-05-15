@@ -11,7 +11,7 @@ import re
 
 import pandas as pd
 
-from tgp.util import update_job_step, system_call, format_payload
+from tgp.util import system_call
 from .util import (get_artifact_information, split_mapping_file,
                    generate_demux_file, generate_artifact_info)
 
@@ -32,8 +32,9 @@ def generate_parameters_string(parameters):
     flag_params = ['rev_comp_barcode', 'rev_comp_mapping_barcodes', 'rev_comp']
     str_params = ['max_bad_run_length', 'min_per_read_length_fraction',
                   'sequence_max_n', 'phred_quality_threshold', 'barcode_type',
-                  'max_barcode_errors']
-    result = ["--%s %s" % (sp, parameters[sp]) for sp in str_params]
+                  'max_barcode_errors', 'phred_offset']
+    result = ["--%s %s" % (sp, parameters[sp]) for sp in str_params
+              if parameters[sp] != ""]
     for fp in flag_params:
         if parameters[fp]:
             result.append("--%s" % fp)
@@ -182,6 +183,9 @@ def generate_split_libraries_fastq_cmd(filepaths, mapping_file, atype,
             reverse_seqs.append(fp)
         elif fp_type == 'raw_barcodes':
             barcode_fps.append(fp)
+        elif fp_type == 'html_summary':
+            # Ignore the HTML summary file
+            continue
         else:
             raise NotImplementedError("File type not supported %s" % fp_type)
 
@@ -238,20 +242,19 @@ def split_libraries_fastq(qclient, job_id, parameters, out_dir):
         The results of the job
     """
     # Step 1 get the rest of the information need to run split libraries
-    update_job_step(qclient, job_id, "Step 1 of 4: Collecting information")
+    qclient.update_job_step(job_id, "Step 1 of 4: Collecting information")
     artifact_id = parameters['input_data']
     filepaths, mapping_file, atype = get_artifact_information(
         qclient, artifact_id)
 
     # Step 2 generate the split libraries fastq command
-    update_job_step(qclient, job_id, "Step 2 of 4: Generating command")
+    qclient.update_job_step(job_id, "Step 2 of 4: Generating command")
     command, sl_out = generate_split_libraries_fastq_cmd(
         filepaths, mapping_file, atype, out_dir, parameters)
 
     # Step 3 execute split libraries
-    update_job_step(
-        qclient, job_id,
-        "Step 3 of 4: Executing demultiplexing and quality control")
+    qclient.update_job_step(
+        job_id, "Step 3 of 4: Executing demultiplexing and quality control")
     std_out, std_err, return_value = system_call(command)
     if return_value != 0:
         raise RuntimeError(
@@ -259,9 +262,9 @@ def split_libraries_fastq(qclient, job_id, parameters, out_dir):
             % (std_out, std_err))
 
     # Step 4 generate the demux file
-    update_job_step(qclient, job_id, "Step 4 of 4: Generating demux file")
+    qclient.update_job_step(job_id, "Step 4 of 4: Generating demux file")
     generate_demux_file(sl_out)
 
     artifacts_info = generate_artifact_info(sl_out)
 
-    return format_payload(True, artifacts_info=artifacts_info)
+    return True, artifacts_info, ""

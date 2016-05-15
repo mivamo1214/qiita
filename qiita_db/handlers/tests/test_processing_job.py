@@ -13,34 +13,28 @@ from datetime import datetime
 from os import close, remove
 from os.path import exists
 
-from qiita_core.util import qiita_test_checker
+from tornado.web import HTTPError
+
 from qiita_db.handlers.tests.oauthbase import OauthTestingBase
 import qiita_db as qdb
 from qiita_db.handlers.processing_job import _get_job
 
 
-@qiita_test_checker()
 class UtilTests(TestCase):
     def test_get_job(self):
         obs = _get_job('6d368e16-2242-4cf8-87b4-a5dc40bb890b')
-        exp = (
-            qdb.processing_job.ProcessingJob(
-                '6d368e16-2242-4cf8-87b4-a5dc40bb890b'),
-            True, '')
+        exp = qdb.processing_job.ProcessingJob(
+            '6d368e16-2242-4cf8-87b4-a5dc40bb890b')
         self.assertEqual(obs, exp)
 
-        obs = _get_job('do-not-exist')
-        exp = (None, False, 'Job does not exist')
-        self.assertEqual(obs, exp)
+        with self.assertRaises(HTTPError):
+            _get_job('do-not-exist')
 
 
 class JobHandlerTests(OauthTestingBase):
     def test_get_job_does_not_exists(self):
         obs = self.get('/qiita_db/jobs/do-not-exist', headers=self.header)
-        self.assertEqual(obs.code, 200)
-        exp = {'success': False, 'error': 'Job does not exist',
-               'command': None, 'parameters': None, 'status': None}
-        self.assertEqual(loads(obs.body), exp)
+        self.assertEqual(obs.code, 404)
 
     def test_get(self):
         obs = self.get('/qiita_db/jobs/6d368e16-2242-4cf8-87b4-a5dc40bb890b',
@@ -52,9 +46,9 @@ class JobHandlerTests(OauthTestingBase):
                   "rev_comp_barcode": False,
                   "rev_comp_mapping_barcodes": False, "rev_comp": False,
                   "phred_quality_threshold": 3, "barcode_type": "golay_12",
-                  "max_barcode_errors": 1.5, "input_data": 1}
-        exp = {'success': True, 'error': '', 'command': cmd,
-               'parameters': params, 'status': 'success'}
+                  "max_barcode_errors": 1.5, "input_data": 1,
+                  'phred_offset': ''}
+        exp = {'command': cmd, 'parameters': params, 'status': 'success'}
         self.assertEqual(loads(obs.body), exp)
 
     def test_get_no_header(self):
@@ -68,18 +62,15 @@ class HeartbeatHandlerTests(OauthTestingBase):
     def test_post_job_does_not_exists(self):
         obs = self.post('/qiita_db/jobs/do-not-exist/heartbeat/', '',
                         headers=self.header)
-        self.assertEqual(obs.code, 200)
-        exp = {'success': False, 'error': 'Job does not exist'}
-        self.assertEqual(loads(obs.body), exp)
+        self.assertEqual(obs.code, 404)
 
     def test_post_job_already_finished(self):
         obs = self.post(
             '/qiita_db/jobs/6d368e16-2242-4cf8-87b4-a5dc40bb890b/heartbeat/',
             '', headers=self.header)
-        self.assertEqual(obs.code, 200)
-        exp = {'success': False,
-               'error': 'Job already finished. Status: success'}
-        self.assertEqual(loads(obs.body), exp)
+        self.assertEqual(obs.code, 403)
+        self.assertEqual(obs.body,
+                         "Can't execute heartbeat on job: already completed")
 
     def test_post(self):
         before = datetime.now()
@@ -87,8 +78,6 @@ class HeartbeatHandlerTests(OauthTestingBase):
             '/qiita_db/jobs/bcc7ebcd-39c1-43e4-af2d-822e3589f14d/heartbeat/',
             '', headers=self.header)
         self.assertEqual(obs.code, 200)
-        exp = {'success': True, 'error': ''}
-        self.assertEqual(loads(obs.body), exp)
         job = qdb.processing_job.ProcessingJob(
             'bcc7ebcd-39c1-43e4-af2d-822e3589f14d')
         self.assertTrue(before < job.heartbeat < datetime.now())
@@ -108,8 +97,6 @@ class HeartbeatHandlerTests(OauthTestingBase):
             '/qiita_db/jobs/063e553b-327c-4818-ab4a-adfe58e49860/heartbeat/',
             '', headers=self.header)
         self.assertEqual(obs.code, 200)
-        exp = {'success': True, 'error': ''}
-        self.assertEqual(loads(obs.body), exp)
         self.assertTrue(before < job.heartbeat < datetime.now())
         self.assertEqual(job.status, 'running')
 
@@ -125,18 +112,16 @@ class ActiveStepHandlerTests(OauthTestingBase):
     def test_post_job_does_not_exists(self):
         obs = self.post('/qiita_db/jobs/do-not-exist/step/', '',
                         headers=self.header)
-        self.assertEqual(obs.code, 200)
-        exp = {'success': False, 'error': 'Job does not exist'}
-        self.assertEqual(loads(obs.body), exp)
+        self.assertEqual(obs.code, 404)
 
     def test_post_non_running_job(self):
         payload = dumps({'step': 'Step 1 of 4: demultiplexing'})
         obs = self.post(
             '/qiita_db/jobs/063e553b-327c-4818-ab4a-adfe58e49860/step/',
             payload, headers=self.header)
-        self.assertEqual(obs.code, 200)
-        exp = {'success': False, 'error': 'Job in a non-running state'}
-        self.assertEqual(loads(obs.body), exp)
+        self.assertEqual(obs.code, 403)
+        self.assertEqual(obs.body, "Cannot change the step of a job whose "
+                                   "status is not 'running'")
 
     def test_post(self):
         payload = dumps({'step': 'Step 1 of 4: demultiplexing'})
@@ -144,8 +129,6 @@ class ActiveStepHandlerTests(OauthTestingBase):
             '/qiita_db/jobs/bcc7ebcd-39c1-43e4-af2d-822e3589f14d/step/',
             payload, headers=self.header)
         self.assertEqual(obs.code, 200)
-        exp = {'success': True, 'error': ''}
-        self.assertEqual(loads(obs.body), exp)
         job = qdb.processing_job.ProcessingJob(
             'bcc7ebcd-39c1-43e4-af2d-822e3589f14d')
         self.assertEqual(job.step, 'Step 1 of 4: demultiplexing')
@@ -159,6 +142,7 @@ class CompleteHandlerTests(OauthTestingBase):
         super(CompleteHandlerTests, self).setUp()
 
     def tearDown(self):
+        super(CompleteHandlerTests, self).tearDown()
         for fp in self._clean_up_files:
             if exists(fp):
                 remove(fp)
@@ -172,18 +156,16 @@ class CompleteHandlerTests(OauthTestingBase):
     def test_post_job_does_not_exists(self):
         obs = self.post('/qiita_db/jobs/do-not-exist/complete/', '',
                         headers=self.header)
-        self.assertEqual(obs.code, 200)
-        exp = {'success': False, 'error': 'Job does not exist'}
-        self.assertEqual(loads(obs.body), exp)
+        self.assertEqual(obs.code, 404)
 
     def test_post_job_not_running(self):
-        payload = dumps({'sucess': False, 'error': 'Job failure'})
+        payload = dumps({'success': True, 'artifacts': []})
         obs = self.post(
             '/qiita_db/jobs/063e553b-327c-4818-ab4a-adfe58e49860/complete/',
             payload, headers=self.header)
-        self.assertEqual(obs.code, 200)
-        exp = {'success': False, 'error': "Job in a non-running state."}
-        self.assertEqual(loads(obs.body), exp)
+        self.assertEqual(obs.code, 403)
+        self.assertEqual(obs.body,
+                         "Can't complete job: not in a running state")
 
     def test_post_job_failure(self):
         payload = dumps({'success': False, 'error': 'Job failure'})
@@ -191,8 +173,6 @@ class CompleteHandlerTests(OauthTestingBase):
             '/qiita_db/jobs/bcc7ebcd-39c1-43e4-af2d-822e3589f14d/complete/',
             payload, headers=self.header)
         self.assertEqual(obs.code, 200)
-        exp = {'success': True, 'error': ''}
-        self.assertEqual(loads(obs.body), exp)
         job = qdb.processing_job.ProcessingJob(
             'bcc7ebcd-39c1-43e4-af2d-822e3589f14d')
         self.assertEqual(job.status, 'error')
@@ -209,18 +189,12 @@ class CompleteHandlerTests(OauthTestingBase):
         exp_artifact_count = qdb.util.get_count('qiita.artifact') + 1
         payload = dumps(
             {'success': True, 'error': '',
-             'artifacts': [
-                 {'filepaths': [(fp, 'biom')],
-                  'artifact_type': 'BIOM',
-                  'can_be_submitted_to_ebi': False,
-                  'can_be_submitted_to_vamps': False}
-             ]})
+             'artifacts': {'OTU table': {'filepaths': [(fp, 'biom')],
+                                         'artifact_type': 'BIOM'}}})
         obs = self.post(
             '/qiita_db/jobs/bcc7ebcd-39c1-43e4-af2d-822e3589f14d/complete/',
             payload, headers=self.header)
         self.assertEqual(obs.code, 200)
-        exp = {'success': True, 'error': ''}
-        self.assertEqual(loads(obs.body), exp)
         job = qdb.processing_job.ProcessingJob(
             'bcc7ebcd-39c1-43e4-af2d-822e3589f14d')
         self.assertEqual(job.status, 'success')
