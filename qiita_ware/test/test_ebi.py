@@ -275,7 +275,8 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
 
         if prep_template.artifact is None:
             artifact = Artifact.create(
-                [(demux_fp, 6)], "Demultiplexed", prep_template=prep_template)
+                [(demux_fp, 6)], "Demultiplexed", prep_template=prep_template,
+                can_be_submitted_to_ebi=True, can_be_submitted_to_vamps=True)
         else:
             params = Parameters.from_default_params(
                 DefaultParameters(1),
@@ -283,7 +284,8 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
             artifact = Artifact.create(
                 [(demux_fp, 6)], "Demultiplexed",
                 parents=[prep_template.artifact],
-                processing_parameters=params)
+                processing_parameters=params,
+                can_be_submitted_to_ebi=True, can_be_submitted_to_vamps=True)
 
         return artifact
 
@@ -424,7 +426,8 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
 
         # Magic number 6: the id of the preprocessed_demux filepath_type
         artifact = Artifact.create(
-            [(demux_fp, 6)], "Demultiplexed", prep_template=pt)
+            [(demux_fp, 6)], "Demultiplexed", prep_template=pt,
+            can_be_submitted_to_ebi=True, can_be_submitted_to_vamps=True)
 
         return artifact
 
@@ -444,7 +447,7 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
         artifact = self.generate_new_prep_template_and_write_demux_files()
         # raise error as we are missing columns
         exp_text = ("Errors found during EBI submission for study #1, "
-                    "artifact #8 and prep template #3:\nUnrecognized "
+                    "artifact #5 and prep template #2:\nUnrecognized "
                     "investigation type: 'None'. This term is neither one of "
                     "the official terms nor one of the user-defined terms in "
                     "the ENA ontology.\nThese samples do not have a valid "
@@ -649,32 +652,32 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
         _, base_fp = get_mountpoint("preprocessed_data")[0]
         exp = ('ascp --ignore-host-key -d -QT -k2 '
                '%(ebi_dir)s/1.SKB2.640194.fastq.gz '
-               'Webin-41528@webin.ebi.ac.uk:./%(aid)d_ebi_submission/\n'
+               'Webin-41528@webin.ebi.ac.uk:./5_ebi_submission/\n'
                'ascp --ignore-host-key -d -QT -k2 '
                '%(ebi_dir)s/1.SKM4.640180.fastq.gz '
-               'Webin-41528@webin.ebi.ac.uk:./%(aid)d_ebi_submission/\n'
+               'Webin-41528@webin.ebi.ac.uk:./5_ebi_submission/\n'
                'ascp --ignore-host-key -d -QT -k2 '
                '%(ebi_dir)s/1.SKB3.640195.fastq.gz '
-               'Webin-41528@webin.ebi.ac.uk:./%(aid)d_ebi_submission/\n'
+               'Webin-41528@webin.ebi.ac.uk:./5_ebi_submission/\n'
                'ascp --ignore-host-key -d -QT -k2 '
                '%(ebi_dir)s/1.SKB6.640176.fastq.gz '
-               'Webin-41528@webin.ebi.ac.uk:./%(aid)d_ebi_submission/\n'
+               'Webin-41528@webin.ebi.ac.uk:./5_ebi_submission/\n'
                'ascp --ignore-host-key -d -QT -k2 '
                '%(ebi_dir)s/1.SKD6.640190.fastq.gz '
-               'Webin-41528@webin.ebi.ac.uk:./%(aid)d_ebi_submission/\n'
+               'Webin-41528@webin.ebi.ac.uk:./5_ebi_submission/\n'
                'ascp --ignore-host-key -d -QT -k2 '
                '%(ebi_dir)s/1.SKM6.640187.fastq.gz '
-               'Webin-41528@webin.ebi.ac.uk:./%(aid)d_ebi_submission/\n'
+               'Webin-41528@webin.ebi.ac.uk:./5_ebi_submission/\n'
                'ascp --ignore-host-key -d -QT -k2 '
                '%(ebi_dir)s/1.SKD9.640182.fastq.gz '
-               'Webin-41528@webin.ebi.ac.uk:./%(aid)d_ebi_submission/\n'
+               'Webin-41528@webin.ebi.ac.uk:./5_ebi_submission/\n'
                'ascp --ignore-host-key -d -QT -k2 '
                '%(ebi_dir)s/1.SKM8.640201.fastq.gz '
-               'Webin-41528@webin.ebi.ac.uk:./%(aid)d_ebi_submission/\n'
+               'Webin-41528@webin.ebi.ac.uk:./5_ebi_submission/\n'
                'ascp --ignore-host-key -d -QT -k2 '
                '%(ebi_dir)s/1.SKM2.640199.fastq.gz '
-               'Webin-41528@webin.ebi.ac.uk:./%(aid)d_ebi_submission/' % {
-                   'ebi_dir': e.full_ebi_dir, 'aid': artifact.id}).split('\n')
+               'Webin-41528@webin.ebi.ac.uk:./5_ebi_submission/' % {
+                   'ebi_dir': e.full_ebi_dir}).split('\n')
         self.assertEqual(obs, exp)
 
     def test_parse_EBI_reply(self):

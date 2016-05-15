@@ -8,7 +8,6 @@ from .base_handlers import BaseHandler
 from qiita_ware.context import submit
 from qiita_ware.dispatchable import create_raw_data, copy_raw_data
 from qiita_core.util import execute_as_transaction
-from qiita_core.qiita_settings import qiita_config
 from qiita_db.util import get_mountpoint
 from qiita_db.metadata_template.prep_template import PrepTemplate
 
@@ -24,7 +23,7 @@ class ComputeCompleteHandler(BaseHandler):
             # TODO: something smart
             pass
 
-        self.redirect('%s/' % qiita_config.portal_dir)
+        self.redirect('/')
 
 
 class CreateRawData(BaseHandler):
@@ -83,6 +82,5 @@ class CreateRawData(BaseHandler):
         self.render('compute_wait.html',
                     job_id=job_id, title='Adding raw data',
                     completion_redirect=(
-                        '%s/study/description/%s?top_tab=prep_template_tab'
-                        '&sub_tab=%s'
-                        % (qiita_config.portal_dir, study_id, pt_id)))
+                        '/study/description/%s?top_tab=prep_template_tab'
+                        '&sub_tab=%s' % (study_id, pt_id)))

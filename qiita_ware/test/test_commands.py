@@ -50,14 +50,16 @@ class CommandsTests(TestCase):
 
         if prep_template.artifact is None:
             ppd = Artifact.create(
-                [(demux_fp, 6)], "Demultiplexed", prep_template=prep_template)
+                [(demux_fp, 6)], "Demultiplexed", prep_template=prep_template,
+                can_be_submitted_to_ebi=True, can_be_submitted_to_vamps=True)
         else:
             params = Parameters.from_default_params(
                 DefaultParameters(1),
                 {'input_data': prep_template.artifact.id})
             ppd = Artifact.create(
                 [(demux_fp, 6)], "Demultiplexed",
-                parents=[prep_template.artifact], processing_parameters=params)
+                parents=[prep_template.artifact], processing_parameters=params,
+                can_be_submitted_to_ebi=True, can_be_submitted_to_vamps=True)
         return ppd
 
     def generate_new_study_with_preprocessed_data(self):
@@ -130,7 +132,8 @@ class CommandsTests(TestCase):
             to_hdf5(fna_fp, f)
 
         ppd = Artifact.create(
-            [(demux_fp, 6)], "Demultiplexed", prep_template=pt)
+            [(demux_fp, 6)], "Demultiplexed", prep_template=pt,
+            can_be_submitted_to_ebi=True, can_be_submitted_to_vamps=True)
 
         return ppd
 

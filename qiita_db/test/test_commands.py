@@ -123,7 +123,9 @@ class TestLoadArtifactFromCmd(TestCase):
         obs = qdb.commands.load_artifact_from_cmd(
             fps, ftypes, 'Demultiplexed', parents=[1], dflt_params_id=1,
             required_params='{"input_data": 1}',
-            optional_params='{"min_per_read_length_fraction": 0.80}')
+            optional_params='{"min_per_read_length_fraction": 0.80}',
+            can_be_submitted_to_ebi=True,
+            can_be_submitted_to_vamps=True)
         self.files_to_remove.extend([fp for _, fp, _ in obs.filepaths])
         self.assertEqual(obs.id, self.artifact_count + 1)
         self.assertTrue(
@@ -186,7 +188,7 @@ class TestLoadPrepTemplateFromCmd(TestCase):
         """Correctly adds a prep template to the DB"""
         fh = StringIO(self.pt_contents)
         st = qdb.commands.load_prep_template_from_cmd(fh, 1, '18S')
-        self.assertEqual(st.id, 3)
+        self.assertEqual(st.id, 2)
 
 
 @qiita_test_checker()
@@ -226,7 +228,7 @@ class TestLoadParametersFromCmd(TestCase):
             "test", self.fp, 1)
         obs = new.values
         exp = {"barcode_type": "hamming_8", "max_bad_run_length": "3",
-               "phred_offset": "", "max_barcode_errors": "1.5",
+               "max_barcode_errors": "1.5",
                "min_per_read_length_fraction": "0.75",
                "phred_quality_threshold": "3", "sequence_max_n": "0",
                "rev_comp": "False", "rev_comp_barcode": "False",

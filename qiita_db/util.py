@@ -25,7 +25,6 @@ Methods
     convert_from_id
     convert_to_id
     get_environmental_packages
-    get_visibilities
     purge_filepaths
     move_filepaths_to_upload_folder
     move_upload_files_to_trash
@@ -42,7 +41,6 @@ Methods
 
 from __future__ import division
 from future.builtins import zip
-from future.utils import viewitems
 from random import choice
 from string import ascii_letters, digits, punctuation
 from binascii import crc32
@@ -445,7 +443,6 @@ def get_files_from_uploads_folders(study_id):
     list
         List of the filepaths for upload for that study
     """
-    study_id = str(study_id)
     fp = []
     for pid, p in get_mountpoint("uploads", retrieve_all=True):
         t = join(p, study_id)
@@ -648,8 +645,7 @@ def insert_filepaths(filepaths, obj_id, table, filepath_table,
             chain.from_iterable(qdb.sql_connection.TRN.execute()[idx:])))
 
 
-def retrieve_filepaths(obj_fp_table, obj_id_column, obj_id, sort=None,
-                       fp_type=None):
+def retrieve_filepaths(obj_fp_table, obj_id_column, obj_id):
     """Retrieves the filepaths for the given object id
 
     Parameters
@@ -660,11 +656,6 @@ def retrieve_filepaths(obj_fp_table, obj_id_column, obj_id, sort=None,
         The name of the column that represents the object id
     obj_id : int
         The object id
-    sort : {'ascending', 'descending'}, optional
-        The direction in which the results are sorted, using the filepath id
-        as sorting key. Default: None, no sorting is applied
-    fp_type: str, optional
-        Retrieve only the filepaths of the matching filepath type
 
     Returns
     -------
@@ -679,23 +670,6 @@ def retrieve_filepaths(obj_fp_table, obj_id_column, obj_id, sort=None,
         else:
             return join(db_dir, mountpoint, filepath)
 
-    sql_sort = ""
-    if sort == 'ascending':
-        sql_sort = " ORDER BY filepath_id"
-    elif sort == 'descending':
-        sql_sort = " ORDER BY filepath_id DESC"
-    elif sort is not None:
-        raise qdb.exceptions.QiitaDBError(
-            "Unknown sorting direction: %s. Please choose from 'ascending' or "
-            "'descending'" % sort)
-
-    sql_args = [obj_id]
-
-    sql_type = ""
-    if fp_type:
-        sql_type = " AND filepath_type=%s"
-        sql_args.append(fp_type)
-
     with qdb.sql_connection.TRN:
         sql = """SELECT filepath_id, filepath, filepath_type, mountpoint,
                         subdirectory
@@ -703,14 +677,13 @@ def retrieve_filepaths(obj_fp_table, obj_id_column, obj_id, sort=None,
                     JOIN qiita.filepath_type USING (filepath_type_id)
                     JOIN qiita.data_directory USING (data_directory_id)
                     JOIN qiita.{0} USING (filepath_id)
-                 WHERE {1} = %s{2}{3}""".format(obj_fp_table, obj_id_column,
-                                                sql_type, sql_sort)
-        qdb.sql_connection.TRN.add(sql, sql_args)
+                 WHERE {1} = %s""".format(obj_fp_table, obj_id_column)
+        qdb.sql_connection.TRN.add(sql, [obj_id])
         results = qdb.sql_connection.TRN.execute_fetchindex()
         db_dir = get_db_files_base_dir()
 
-        return [(fpid, path_builder(db_dir, fp, m, s, obj_id), fp_type_)
-                for fpid, fp, fp_type_, m, s in results]
+        return [(fpid, path_builder(db_dir, fp, m, s, obj_id), fp_type)
+                for fpid, fp, fp_type, m, s in results]
 
 
 def purge_filepaths():
@@ -781,18 +754,14 @@ def move_filepaths_to_upload_folder(study_id, filepaths):
 
         # We can now go over and remove all the filepaths
         sql = """DELETE FROM qiita.filepath WHERE filepath_id=%s"""
-        for fp_id, fp, fp_type in filepaths:
+        for fp_id, fp, _ in filepaths:
             qdb.sql_connection.TRN.add(sql, [fp_id])
 
-            if fp_type == 'html_summary':
-                qdb.sql_connection.TRN.add_post_commit_func(
-                    remove, fp)
-            else:
-                destination = path_builder(basename(fp))
+            destination = path_builder(basename(fp))
 
-                qdb.sql_connection.TRN.add_post_rollback_func(
-                    move, destination, fp)
-                move(fp, destination)
+            qdb.sql_connection.TRN.add_post_rollback_func(
+                move, destination, fp)
+            move(fp, destination)
 
         qdb.sql_connection.TRN.execute()
 
@@ -1010,19 +979,6 @@ def get_environmental_packages():
         return qdb.sql_connection.TRN.execute_fetchindex()
 
 
-def get_visibilities():
-    """Get the list of available visibilities for artifacts
-
-    Returns
-    -------
-    list of str
-        The available visibilities
-    """
-    with qdb.sql_connection.TRN:
-        qdb.sql_connection.TRN.add("SELECT visibility FROM qiita.visibility")
-        return qdb.sql_connection.TRN.execute_fetchflatten()
-
-
 def get_timeseries_types():
     """Get the list of available timeseries types
 
@@ -1196,273 +1152,3 @@ def clear_system_messages():
             sql = "DELETE FROM qiita.message WHERE message_id IN %s"
             qdb.sql_connection.TRN.add(sql, [msg_ids])
             qdb.sql_connection.TRN.execute()
-
-
-def supported_filepath_types(artifact_type):
-    """Returns the list of supported filepath types for the given artifact type
-
-    Parameters
-    ----------
-    artifact_type : str
-        The artifact type to check the supported filepath types
-
-    Returns
-    -------
-    list of [str, bool]
-        The list of supported filepath types and whether it is required by the
-        artifact type or not
-    """
-    with qdb.sql_connection.TRN:
-        sql = """SELECT DISTINCT filepath_type, required
-                 FROM qiita.artifact_type_filepath_type
-                    JOIN qiita.artifact_type USING (artifact_type_id)
-                    JOIN qiita.filepath_type USING (filepath_type_id)
-                 WHERE artifact_type = %s"""
-        qdb.sql_connection.TRN.add(sql, [artifact_type])
-        return qdb.sql_connection.TRN.execute_fetchindex()
-
-
-def generate_study_list(study_ids, build_samples):
-    """Get general study information
-
-    Parameters
-    ----------
-    study_ids : list of ints
-        The study ids to look for. Non-existing ids will be ignored
-    build_samples : bool
-        If true the sample information for each process artifact within each
-        study will be included
-
-    Returns
-    -------
-    list of dict
-        The list of studies and their information
-
-    Notes
-    -----
-    The main select might look scary but it's pretty simple:
-    - We select the requiered fields from qiita.study and qiita.study_person
-        SELECT metadata_complete, study_abstract, study_id,
-            study_title, ebi_study_accession, ebi_submission_status,
-            qiita.study_person.name AS pi_name,
-            qiita.study_person.email AS pi_email,
-    - the total number of samples collected by counting sample_ids
-            (SELECT COUNT(sample_id) FROM qiita.study_sample
-                WHERE study_id=qiita.study.study_id)
-                AS number_samples_collected,
-    - all the BIOM artifact_ids sorted by artifact_id that belong to the study
-            (SELECT array_agg(artifact_id ORDER BY artifact_id)
-                FROM qiita.study_artifact
-                LEFT JOIN qiita.artifact USING (artifact_id)
-                LEFT JOIN qiita.artifact_type USING (artifact_type_id)
-                WHERE artifact_type='BIOM' AND
-                study_id = qiita.study.study_id) AS artifact_biom_ids,
-    - all the BIOM data_types sorted by artifact_id that belong to the study
-            (SELECT array_agg(data_type ORDER BY artifact_id)
-                FROM qiita.study_artifact
-                LEFT JOIN qiita.artifact USING (artifact_id)
-                LEFT JOIN qiita.data_type USING (data_type_id)
-                LEFT JOIN qiita.artifact_type USING (artifact_type_id)
-                WHERE artifact_type='BIOM' AND
-                study_id = qiita.study.study_id) AS artifact_biom_dts,
-    - all the BIOM parameters sorted by artifact_id that belong to the study
-            (SELECT array_agg(command_parameters ORDER BY artifact_id)
-                FROM qiita.study_artifact
-                LEFT JOIN qiita.artifact USING (artifact_id)
-                LEFT JOIN qiita.artifact_type USING (artifact_type_id)
-                WHERE artifact_type='BIOM' AND
-                    study_id = qiita.study.study_id)
-                AS artifact_biom_params,
-    - all the BIOM command_ids sorted by artifact_id that belong to the study,
-            (SELECT array_agg(command_id ORDER BY artifact_id)
-                FROM qiita.study_artifact
-                LEFT JOIN qiita.artifact USING (artifact_id)
-                LEFT JOIN qiita.artifact_type USING (artifact_type_id)
-                WHERE artifact_type='BIOM' AND
-                    study_id = qiita.study.study_id)
-                AS artifact_biom_cmd,
-    - all the BIOM timestamps sorted by artifact_id that belong to the study
-            (SELECT array_agg(generated_timestamp ORDER BY artifact_id)
-                FROM qiita.study_artifact
-                LEFT JOIN qiita.artifact USING (artifact_id)
-                LEFT JOIN qiita.artifact_type USING (artifact_type_id)
-                WHERE artifact_type='BIOM' AND
-                    study_id = qiita.study.study_id) AS artifact_biom_ts,
-    - all the visibilities of all artifacts that belong to the study
-            (SELECT array_agg(DISTINCT visibility) FROM qiita.artifact
-                LEFT JOIN qiita.visibility USING (visibility_id)
-                WHERE study_id=qiita.study.study_id)
-                AS artifacts_visibility,
-    - all the publication_doi that belong to the study
-            (SELECT array_agg(publication_doi ORDER BY publication_doi)
-                FROM qiita.study_publication
-                WHERE study_id=qiita.study.study_id) AS publication_doi,
-    - all names sorted by email of users that have access to the study
-            (SELECT array_agg(name ORDER BY email) FROM qiita.study_users
-                LEFT JOIN qiita.qiita_user USING (email)
-                WHERE study_id=qiita.study.study_id) AS shared_with_name,
-    - all emails sorted by email of users that have access to the study
-            (SELECT array_agg(email ORDER BY email) FROM qiita.study_users
-                LEFT JOIN qiita.qiita_user USING (email)
-                WHERE study_id=qiita.study.study_id) AS shared_with_email
-    """
-    with qdb.sql_connection.TRN:
-        sql = """
-            SELECT metadata_complete, study_abstract, study_id,
-                study_title, ebi_study_accession, ebi_submission_status,
-                qiita.study_person.name AS pi_name,
-                qiita.study_person.email AS pi_email,
-                (SELECT COUNT(sample_id) FROM qiita.study_sample
-                    WHERE study_id=qiita.study.study_id)
-                    AS number_samples_collected,
-                (SELECT array_agg(artifact_id ORDER BY artifact_id)
-                    FROM qiita.study_artifact
-                    LEFT JOIN qiita.artifact USING (artifact_id)
-                    LEFT JOIN qiita.artifact_type USING (artifact_type_id)
-                    WHERE artifact_type='BIOM' AND
-                        study_id = qiita.study.study_id) AS artifact_biom_ids,
-                (SELECT array_agg(data_type ORDER BY artifact_id)
-                    FROM qiita.study_artifact
-                    LEFT JOIN qiita.artifact USING (artifact_id)
-                    LEFT JOIN qiita.data_type USING (data_type_id)
-                    LEFT JOIN qiita.artifact_type USING (artifact_type_id)
-                    WHERE artifact_type='BIOM' AND
-                        study_id = qiita.study.study_id) AS artifact_biom_dts,
-                (SELECT array_agg(command_parameters ORDER BY artifact_id)
-                    FROM qiita.study_artifact
-                    LEFT JOIN qiita.artifact USING (artifact_id)
-                    LEFT JOIN qiita.artifact_type USING (artifact_type_id)
-                    WHERE artifact_type='BIOM' AND
-                        study_id = qiita.study.study_id)
-                    AS artifact_biom_params,
-                (SELECT array_agg(command_id ORDER BY artifact_id)
-                    FROM qiita.study_artifact
-                    LEFT JOIN qiita.artifact USING (artifact_id)
-                    LEFT JOIN qiita.artifact_type USING (artifact_type_id)
-                    WHERE artifact_type='BIOM' AND
-                        study_id = qiita.study.study_id)
-                    AS artifact_biom_cmd,
-                (SELECT array_agg(generated_timestamp ORDER BY artifact_id)
-                    FROM qiita.study_artifact
-                    LEFT JOIN qiita.artifact USING (artifact_id)
-                    LEFT JOIN qiita.artifact_type USING (artifact_type_id)
-                    WHERE artifact_type='BIOM' AND
-                        study_id = qiita.study.study_id) AS artifact_biom_ts,
-                (SELECT array_agg(DISTINCT visibility) FROM qiita.artifact
-                    LEFT JOIN qiita.visibility USING (visibility_id)
-                    WHERE study_id=qiita.study.study_id)
-                    AS artifacts_visibility,
-                (SELECT array_agg(publication_doi ORDER BY publication_doi)
-                    FROM qiita.study_publication
-                    WHERE study_id=qiita.study.study_id) AS publication_doi,
-                (SELECT array_agg(name ORDER BY email) FROM qiita.study_users
-                    LEFT JOIN qiita.qiita_user USING (email)
-                    WHERE study_id=qiita.study.study_id) AS shared_with_name,
-                (SELECT array_agg(email ORDER BY email) FROM qiita.study_users
-                    LEFT JOIN qiita.qiita_user USING (email)
-                    WHERE study_id=qiita.study.study_id) AS shared_with_email
-                FROM qiita.study
-                LEFT JOIN qiita.study_person ON (
-                    study_person_id=principal_investigator_id)
-                WHERE study_id IN %s"""
-        qdb.sql_connection.TRN.add(sql, [tuple(study_ids)])
-        infolist = []
-        refs = {}
-        commands = {}
-        for info in qdb.sql_connection.TRN.execute_fetchindex():
-            info = dict(info)
-
-            # publication info
-            if info['publication_doi'] is not None:
-                info['pmid'] = get_pubmed_ids_from_dois(
-                    info['publication_doi']).values()
-            else:
-                info['publication_doi'] = []
-                info['pmid'] = []
-
-            # visibility
-            info["status"] = infer_status([info['artifacts_visibility']])
-            del info['artifacts_visibility']
-
-            # pi info
-            info["pi"] = (info['pi_email'], info['pi_name'])
-            del info["pi_email"]
-            del info["pi_name"]
-
-            # shared with
-            info['shared'] = []
-            if info['shared_with_name'] and info['shared_with_email']:
-                for name, email in zip(info['shared_with_name'],
-                                       info['shared_with_email']):
-                    if not name:
-                        name = email
-                    info['shared'].append((email, name))
-            del info["shared_with_name"]
-            del info["shared_with_email"]
-
-            info['proc_data_info'] = []
-            if build_samples and info['artifact_biom_ids']:
-                to_loop = zip(
-                    info['artifact_biom_ids'], info['artifact_biom_dts'],
-                    info['artifact_biom_ts'], info['artifact_biom_params'],
-                    info['artifact_biom_cmd'])
-                for artifact_id, dt, ts, params, cmd in to_loop:
-                    proc_info = {'processed_date': str(ts)}
-                    proc_info['pid'] = artifact_id
-                    proc_info['data_type'] = dt
-
-                    # if cmd exists then we can get its parameters
-                    if cmd is not None:
-                        # making sure that the command is only queried once
-                        if cmd not in commands:
-                            commands[cmd] = [
-                                k for k, v in viewitems(
-                                    qdb.software.Command(
-                                        cmd).parameters) if v[0] == 'artifact']
-                        for k in commands[cmd]:
-                            del params[k]
-
-                        # making sure that the reference is only created once
-                        rid = params.pop('reference')
-                        if rid not in refs:
-                            reference = qdb.reference.Reference(rid)
-                            refs[rid] = {
-                                'name': reference.name,
-                                'taxonomy_fp': basename(reference.taxonomy_fp),
-                                'sequence_fp': basename(reference.sequence_fp),
-                                'tree_fp': basename(reference.tree_fp),
-                                'version': reference.version
-                            }
-                        proc_info['reference_name'] = refs[rid]['name']
-                        proc_info['taxonomy_filepath'] = refs[rid][
-                            'taxonomy_fp']
-                        proc_info['sequence_filepath'] = refs[rid][
-                            'sequence_fp']
-                        proc_info['tree_filepath'] = refs[rid]['tree_fp']
-                        proc_info['reference_version'] = refs[rid]['version']
-                        proc_info['algorithm'] = 'sortmerna'
-                        proc_info.update(params)
-
-                    # getting all samples
-                    sql = """SELECT sample_id from qiita.prep_template_sample
-                             WHERE prep_template_id = (
-                                 SELECT prep_template_id
-                                 FROM qiita.prep_template
-                                 WHERE artifact_id IN (
-                                     SELECT *
-                                     FROM qiita.find_artifact_roots(%s)))"""
-                    qdb.sql_connection.TRN.add(sql, [proc_info['pid']])
-                    proc_info['samples'] = sorted(
-                        qdb.sql_connection.TRN.execute_fetchflatten())
-
-                    info["proc_data_info"].append(proc_info)
-
-            del info["artifact_biom_ids"]
-            del info["artifact_biom_dts"]
-            del info["artifact_biom_ts"]
-            del info["artifact_biom_params"]
-            del info['artifact_biom_cmd']
-
-            infolist.append(info)
-
-    return infolist

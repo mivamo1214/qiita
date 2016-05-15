@@ -8,9 +8,6 @@
  *
  */
 function bootstrapAlert(message, severity, timeout){
-  // Clear the previous alert - so they don't keep stacking on top of each other
-  $('#bootstrap-alert').alert('close');
-
   // make timeout an optional parameter
   timeout = timeout || -1;
 

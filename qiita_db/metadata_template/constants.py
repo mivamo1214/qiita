@@ -53,14 +53,17 @@ PREP_TEMPLATE_COLUMNS_TARGET_GENE = {
     'demultiplex': Restriction(
         columns={'barcode': 'varchar',
                  'primer': 'varchar'},
-        error_msg="Demultiplexing disabled."),
+        error_msg="Demultiplexing disabled. You will not be able to "
+                  "preprocess your raw data"),
     # The following columns are required by Qiita to know how to execute split
     # libraries using QIIME over a study with multiple illumina lanes
     'demultiplex_multiple': Restriction(
         columns={'barcode': 'varchar',
                  'primer': 'varchar',
                  'run_prefix': 'varchar'},
-        error_msg="Demultiplexing with multiple input files disabled.")
+        error_msg="Demultiplexing with multiple input files disabled. If your "
+                  "raw data includes multiple raw input files, you will not "
+                  "be able to preprocess your raw data")
 }
 
 # This list is useful to have if we want to loop through all the restrictions

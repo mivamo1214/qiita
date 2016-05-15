@@ -11,7 +11,6 @@ from tornado.web import authenticated, HTTPError
 from wtforms import (Form, StringField, SelectField, SelectMultipleField,
                      TextAreaField, validators)
 
-from qiita_core.qiita_settings import qiita_config
 from qiita_db.study import Study, StudyPerson
 from qiita_db.util import get_timeseries_types, get_environmental_packages
 from qiita_db.exceptions import QiitaDBUnknownIDError
@@ -88,9 +87,8 @@ class StudyEditorForm(Form):
             self.study_description.data = study_info[
                 'study_description'].decode('utf-8')
             self.principal_investigator.data = study_info[
-                'principal_investigator'].id
-            self.lab_person.data = (study_info['lab_person'].id
-                                    if study_info['lab_person'] else None)
+                'principal_investigator_id']
+            self.lab_person.data = study_info['lab_person_id']
 
 
 class StudyEditorExtendedForm(StudyEditorForm):
@@ -262,20 +260,18 @@ class StudyEditHandler(BaseHandler):
             the_study.title = study_title
             the_study.info = info
 
-            msg = ('Study <a href="%s/study/description/%d">%s</a> '
+            msg = ('Study <a href="/study/description/%d">%s</a> '
                    'successfully updated' %
-                   (qiita_config.portal_dir, the_study.id,
-                    form_data.data['study_title'][0]))
+                   (the_study.id, form_data.data['study_title'][0]))
         else:
             # create the study
             # TODO: Fix this EFO once ontology stuff from emily is added
             the_study = Study.create(self.current_user, study_title,
                                      efo=[1], info=info)
 
-            msg = ('Study <a href="%s/study/description/%d">%s</a> '
+            msg = ('Study <a href="/study/description/%d">%s</a> '
                    'successfully created' %
-                   (qiita_config.portal_dir, the_study.id,
-                    form_data.data['study_title'][0]))
+                   (the_study.id, form_data.data['study_title'][0]))
 
         # Add the environmental packages, this attribute can only be edited
         # if the study is not public, otherwise this cannot be changed

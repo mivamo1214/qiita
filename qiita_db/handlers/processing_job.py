@@ -6,9 +6,8 @@
 # The full license is in the file LICENSE, distributed with this software.
 # -----------------------------------------------------------------------------
 
+from datetime import datetime
 from json import loads
-
-from tornado.web import HTTPError
 
 import qiita_db as qdb
 from .oauth2 import OauthBaseHandler, authenticate_oauth
@@ -24,25 +23,20 @@ def _get_job(job_id):
 
     Returns
     -------
-    qiita_db.processing_job.ProcessingJob
-        The requested job
-
-    Raises
-    ------
-    HTTPError
-        If the job does not exist, with error code 404
-        If there is a problem instantiating the processing job, with error
-        code 500
+    qiita_db.processing_job.ProcessingJob, bool, string
+        The requested job or None
+        Whether if we could get the job or not
+        Error message in case we couldn't get the job
     """
     if not qdb.processing_job.ProcessingJob.exists(job_id):
-        raise HTTPError(404)
+        return None, False, 'Job does not exist'
 
     try:
         job = qdb.processing_job.ProcessingJob(job_id)
-    except Exception as e:
-        raise HTTPError(500, 'Error instantiating the job: %s' % str(e))
+    except qdb.exceptions.QiitaDBError as e:
+        return None, False, 'Error instantiating the job: %s' % str(e)
 
-    return job
+    return job, True, ''
 
 
 class JobHandler(OauthBaseHandler):
@@ -58,21 +52,32 @@ class JobHandler(OauthBaseHandler):
         Returns
         -------
         dict
-            {'command': str,
+            Format:
+            {'success': bool,
+             'error': str,
+             'command': str,
              'parameters': dict of {str, obj},
              'status': str}
+
+             - success: whether the request is successful or not
+             - error: in case that success is false, it contains the error msg
              - command: the name of the command that the job executes
              - parameters: the parameters of the command, keyed by parameter
              name
              - status: the status of the job
         """
         with qdb.sql_connection.TRN:
-            job = _get_job(job_id)
-            cmd = job.command.name
-            params = job.parameters.values
-            status = job.status
+            job, success, error_msg = _get_job(job_id)
+            cmd = None
+            params = None
+            status = None
+            if success:
+                cmd = job.command.name
+                params = job.parameters.values
+                status = job.status
 
-        response = {'command': cmd, 'parameters': params,
+        response = {'success': success, 'error': error_msg,
+                    'command': cmd, 'parameters': params,
                     'status': status}
         self.write(response)
 
@@ -86,16 +91,31 @@ class HeartbeatHandler(OauthBaseHandler):
         ----------
         job_id : str
             The job id
+
+        Returns
+        -------
+        dict
+            Format:
+            {'success': bool,
+             'error': str}
+            - success: whether the heartbeat was successful
+            - error: in case that success is false, it contains the error msg
         """
         with qdb.sql_connection.TRN:
-            job = _get_job(job_id)
+            job, success, error_msg = _get_job(job_id)
+            if success:
+                job_status = job.status
+                if job_status == 'queued':
+                    job.status = 'running'
+                    job.heartbeat = datetime.now()
+                elif job_status == 'running':
+                    job.heartbeat = datetime.now()
+                else:
+                    success = False
+                    error_msg = 'Job already finished. Status: %s' % job_status
 
-            try:
-                job.update_heartbeat_state()
-            except qdb.exceptions.QiitaDBOperationNotPermittedError as e:
-                raise HTTPError(403, str(e))
-
-        self.finish()
+        response = {'success': success, 'error': error_msg}
+        self.write(response)
 
 
 class ActiveStepHandler(OauthBaseHandler):
@@ -107,17 +127,30 @@ class ActiveStepHandler(OauthBaseHandler):
         ----------
         job_id : str
             The job id
+
+        Returns
+        -------
+        dict
+            Format:
+            {'success': bool,
+             'error': str}
+            - success: whether the job's step was successfully updated
+            - error: in case that success is false, it contains the error msg
         """
         with qdb.sql_connection.TRN:
-            job = _get_job(job_id)
-            payload = loads(self.request.body)
-            step = payload['step']
-            try:
-                job.step = step
-            except qdb.exceptions.QiitaDBOperationNotPermittedError as e:
-                raise HTTPError(403, str(e))
+            job, success, error_msg = _get_job(job_id)
+            if success:
+                job_status = job.status
+                if job_status != 'running':
+                    success = False
+                    error_msg = 'Job in a non-running state'
+                else:
+                    payload = loads(self.request.body)
+                    step = payload['step']
+                    job.step = step
 
-        self.finish()
+        response = {'success': success, 'error': error_msg}
+        self.write(response)
 
 
 class CompleteHandler(OauthBaseHandler):
@@ -129,21 +162,43 @@ class CompleteHandler(OauthBaseHandler):
         ----------
         job_id : str
             The job to complete
+
+        Returns
+        -------
+        dict
+            Format:
+            {'success': bool,
+             'error': str}
+            - success: whether the job information was successfuly updated
+            - error: in case that success is false, it contains the error msg
         """
         with qdb.sql_connection.TRN:
-            job = _get_job(job_id)
+            job, success, error_msg = _get_job(job_id)
+            if success:
+                if job.status != 'running':
+                    success = False
+                    error_msg = 'Job in a non-running state.'
+                else:
+                    payload = loads(self.request.body)
+                    if payload['success']:
+                        for artifact_data in payload['artifacts']:
+                            filepaths = artifact_data['filepaths']
+                            atype = artifact_data['artifact_type']
+                            parents = job.input_artifacts
+                            params = job.parameters
+                            ebi = artifact_data['can_be_submitted_to_ebi']
+                            vamps = artifact_data['can_be_submitted_to_vamps']
+                            qdb.artifact.Artifact.create(
+                                filepaths, atype, parents=parents,
+                                processing_parameters=params,
+                                can_be_submitted_to_ebi=ebi,
+                                can_be_submitted_to_vamps=vamps)
+                        job.status = 'success'
+                    else:
+                        log = qdb.logger.LogEntry.create(
+                            'Runtime', payload['error'])
+                        job.status = 'error'
+                        job.log = log
 
-            payload = loads(self.request.body)
-            payload_success = payload['success']
-            if payload_success:
-                artifacts = payload['artifacts']
-                error = None
-            else:
-                artifacts = None
-                error = payload['error']
-            try:
-                job.complete(payload_success, artifacts, error)
-            except qdb.exceptions.QiitaDBOperationNotPermittedError as e:
-                raise HTTPError(403, str(e))
-
-        self.finish()
+        response = {'success': success, 'error': error_msg}
+        self.write(response)

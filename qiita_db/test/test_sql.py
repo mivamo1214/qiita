@@ -71,7 +71,9 @@ class TestSQL(TestCase):
         new = qdb.artifact.Artifact.create(
             fp, "BIOM",
             parents=[qdb.artifact.Artifact(2), qdb.artifact.Artifact(3)],
-            processing_parameters=params)
+            processing_parameters=params,
+            can_be_submitted_to_ebi=True,
+            can_be_submitted_to_vamps=True)
         self._files_to_remove.extend([afp for _, afp, _ in new.filepaths])
         obs = self.conn_handler.execute_fetchall(sql, [new.id])
         exp = [[1]]
@@ -135,7 +137,7 @@ class TestSQL(TestCase):
         self._files_to_remove.extend([afp for _, afp, _ in new.filepaths])
         obs = self.conn_handler.execute_fetchall(sql, [new.id])
         exp = [[1], [new_root.id]]
-        self.assertItemsEqual(obs, exp)
+        self.assertEqual(obs, exp)
 
     def test_artifact_ancestry_root(self):
         """Correctly returns the ancestry of a root artifact"""
@@ -181,7 +183,7 @@ class TestSQL(TestCase):
         """Correctly returns the descendants of a root artifact"""
         sql = "SELECT * FROM qiita.artifact_descendants(%s)"
         obs = self.conn_handler.execute_fetchall(sql, [1])
-        exp = [[2, 1], [3, 1], [4, 2], [5, 2], [6L, 2L]]
+        exp = [[2, 1], [3, 1], [4, 2]]
         self.assertItemsEqual(obs, exp)
 
     def test_artifact_descendants_middle(self):
@@ -189,8 +191,8 @@ class TestSQL(TestCase):
         the DAG"""
         sql = "SELECT * FROM qiita.artifact_descendants(%s)"
         obs = self.conn_handler.execute_fetchall(sql, [2])
-        exp = [[4, 2], [5, 2], [6L, 2L]]
-        self.assertItemsEqual(obs, exp)
+        exp = [[4, 2]]
+        self.assertEqual(obs, exp)
 
 
 if __name__ == '__main__':

@@ -91,7 +91,8 @@ def load_study_from_cmd(owner, title, info):
 def load_artifact_from_cmd(filepaths, filepath_types, artifact_type,
                            prep_template=None, parents=None,
                            dflt_params_id=None, required_params=None,
-                           optional_params=None):
+                           optional_params=None, can_be_submitted_to_ebi=False,
+                           can_be_submitted_to_vamps=False):
     r"""Adds an artifact to the system
 
     Parameters
@@ -112,6 +113,10 @@ def load_artifact_from_cmd(filepaths, filepath_types, artifact_type,
         JSON string with the required parameters used to process the artifact
     optional_params : str, optional
         JSON string with the optional parameters used to process the artifact
+    can_be_submitted_to_ebi : bool, optional
+        Whether the artifact can be submitted to EBI or not
+    can_be_submitted_to_vamps : bool, optional
+        Whether the artifact can be submitted to VAMPS or not
 
     Returns
     -------
@@ -156,7 +161,9 @@ def load_artifact_from_cmd(filepaths, filepath_types, artifact_type,
 
         return qdb.artifact.Artifact.create(
             fps, artifact_type, prep_template=prep_template, parents=parents,
-            processing_parameters=params)
+            processing_parameters=params,
+            can_be_submitted_to_ebi=can_be_submitted_to_ebi,
+            can_be_submitted_to_vamps=can_be_submitted_to_vamps)
 
 
 def load_sample_template_from_cmd(sample_temp_path, study_id):

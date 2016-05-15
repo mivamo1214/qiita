@@ -8,7 +8,7 @@
 
 from os.path import join, exists
 from functools import partial
-from os import makedirs, stat
+from os import makedirs
 
 import pandas as pd
 from h5py import File
@@ -42,15 +42,36 @@ def get_artifact_information(qclient, artifact_id):
     """
     # Get the artifact filepath information
     fps_info = qclient.get("/qiita_db/artifacts/%s/filepaths/" % artifact_id)
+    if not fps_info or not fps_info['success']:
+        error_msg = "Could not get artifact filepath information: %s"
+        if fps_info:
+            error_msg = error_msg % fps_info['error']
+        else:
+            error_msg = error_msg % "could not connect with the server"
+        raise ValueError(error_msg)
     fps = fps_info['filepaths']
 
     # Get the artifact metadata
     metadata_info = qclient.get(
         "/qiita_db/artifacts/%s/mapping/" % artifact_id)
+    if not metadata_info or not metadata_info['success']:
+        error_msg = "Could not get artifact metadata information %s"
+        if metadata_info:
+            error_msg = error_msg % metadata_info['error']
+        else:
+            error_msg = error_msg % "could not connect with the server"
+        raise ValueError(error_msg)
     mapping_file = metadata_info['mapping']
 
     # Get the artifact type
     type_info = qclient.get("/qiita_db/artifacts/%s/type/" % artifact_id)
+    if not type_info or not type_info['success']:
+        error_msg = "Could not get artifact metadata information %s"
+        if type_info:
+            error_msg = error_msg % type_info['error']
+        else:
+            error_msg = error_msg % "could not connect with the server"
+        raise ValueError(error_msg)
     artifact_type = type_info['type']
 
     return fps, mapping_file, artifact_type
@@ -82,8 +103,7 @@ def split_mapping_file(mapping_file, out_dir):
         for prefix, df in mf.groupby('run_prefix'):
             out_fp = path_builder('%s_mapping_file.txt' % prefix)
             output_fps.append(out_fp)
-            df.to_csv(out_fp, index_label='#SampleID', sep='\t',
-                      encoding='utf-8')
+            df.to_csv(out_fp, index_label='#SampleID', sep='\t')
     else:
         output_fps = [mapping_file]
 
@@ -113,8 +133,6 @@ def generate_demux_file(sl_out):
     if not exists(fastq_fp):
         raise ValueError("The split libraries output directory does not "
                          "contain the demultiplexed fastq file.")
-    elif stat(fastq_fp).st_size == 0:
-        raise ValueError("No sequences were demuxed. Check your parameters.")
 
     demux_fp = join(sl_out, 'seqs.demux')
     with File(demux_fp, "w") as f:
@@ -132,16 +150,17 @@ def generate_artifact_info(sl_out):
 
     Returns
     -------
-    list of [str, str, list of (str, str)]
+    list of [str, list of (str, str), bool, bool]
         The artifacts information to include in the payload when the split
         libraries job is completed.
-        - The command output name
         - The artifact type
         - The list of filepaths with their artifact type
+        - Whether the artifact can be submitted to ebi
+        - Whether the artifact can be submitted to vamps
     """
     path_builder = partial(join, sl_out)
     filepaths = [(path_builder('seqs.fna'), 'preprocessed_fasta'),
                  (path_builder('seqs.fastq'), 'preprocessed_fastq'),
                  (path_builder('seqs.demux'), 'preprocessed_demux'),
                  (path_builder('split_library_log.txt'), 'log')]
-    return [['demultiplexed', 'Demultiplexed', filepaths]]
+    return [['Demultiplexed', filepaths, True, True]]

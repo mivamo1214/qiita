@@ -20,10 +20,11 @@ class TestHandlerBase(AsyncHTTPTestCase):
         self.app.settings['debug'] = False
         return self.app
 
-    def tearDown(self):
+    def setUp(self):
         if self.database:
             clean_test_environment()
-        super(TestHandlerBase, self).tearDown()
+
+        super(TestHandlerBase, self).setUp()
 
     # helpers from http://www.peterbe.com/plog/tricks-asynchttpclient-tornado
     def get(self, url, data=None, headers=None, doseq=True):
@@ -31,7 +32,7 @@ class TestHandlerBase(AsyncHTTPTestCase):
             if isinstance(data, dict):
                 data = urlencode(data, doseq=doseq)
             if '?' in url:
-                url += '&%s' % data
+                url += '&amp;%s' % data
             else:
                 url += '?%s' % data
         return self._fetch(url, 'GET', headers=headers)
@@ -41,25 +42,6 @@ class TestHandlerBase(AsyncHTTPTestCase):
             if isinstance(data, dict):
                 data = urlencode(data, doseq=doseq)
         return self._fetch(url, 'POST', data, headers)
-
-    def patch(self, url, data, headers=None, doseq=True):
-        if isinstance(data, dict):
-            data = urlencode(data, doseq=doseq)
-        if '?' in url:
-            url += '&%s' % data
-        else:
-            url += '?%s' % data
-        return self._fetch(url, 'PATCH', data=data, headers=headers)
-
-    def delete(self, url, data=None, headers=None, doseq=True):
-        if data is not None:
-            if isinstance(data, dict):
-                data = urlencode(data, doseq=doseq)
-            if '?' in url:
-                url += '&%s' % data
-            else:
-                url += '?%s' % data
-        return self._fetch(url, 'DELETE', headers=headers)
 
     def _fetch(self, url, method, data=None, headers=None):
         self.http_client.fetch(self.get_url(url), self.stop, method=method,

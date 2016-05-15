@@ -7,15 +7,13 @@
 # -----------------------------------------------------------------------------
 
 from unittest import TestCase, main
-from copy import deepcopy
-
-import networkx as nx
 
 from qiita_core.util import qiita_test_checker
 import qiita_db as qdb
 
 
-class CommandTestsReadOnly(TestCase):
+@qiita_test_checker()
+class CommandTests(TestCase):
     def setUp(self):
         self.software = qdb.software.Software(1)
         self.parameters = {
@@ -23,39 +21,61 @@ class CommandTestsReadOnly(TestCase):
             'opt_int_param': ['integer', '4'],
             'opt_choice_param': ['choice:["opt1", "opt2"]', 'opt1']}
 
-    def test_get_commands_by_input_type(self):
-        obs = list(qdb.software.Command.get_commands_by_input_type(['FASTQ']))
-        exp = [qdb.software.Command(1)]
-        self.assertItemsEqual(obs, exp)
-
-        obs = list(qdb.software.Command.get_commands_by_input_type(
-            ['FASTQ', 'per_sample_FASTQ']))
-        exp = [qdb.software.Command(1)]
-        self.assertItemsEqual(obs, exp)
-
-        obs = list(qdb.software.Command.get_commands_by_input_type(
-            ['FASTQ', 'SFF']))
-        exp = [qdb.software.Command(1), qdb.software.Command(2)]
-        self.assertItemsEqual(obs, exp)
-
-    def test_get_html_artifact(self):
-        obs = qdb.software.Command.get_html_generator('BIOM')
-        exp = qdb.software.Command(5)
-        self.assertEqual(obs, exp)
-
-        obs = qdb.software.Command.get_html_generator('Demultiplexed')
-        exp = qdb.software.Command(7)
-        self.assertEqual(obs, exp)
-
-    def test_get_html_artifact_error(self):
-        with self.assertRaises(qdb.exceptions.QiitaDBError):
-            qdb.software.Command.get_html_generator('Unknown')
-
     def test_exists(self):
         self.assertFalse(qdb.software.Command.exists(
             self.software, "donotexists"))
         self.assertTrue(qdb.software.Command.exists(
             self.software, "Split libraries"))
+
+    def test_create_error_no_parameters(self):
+        with self.assertRaises(qdb.exceptions.QiitaDBError):
+            qdb.software.Command.create(
+                self.software, "Test command", "Testing command", {})
+
+        with self.assertRaises(qdb.exceptions.QiitaDBError):
+            qdb.software.Command.create(
+                self.software, "Test command", "Testing command", None)
+
+    def test_create_error_malformed_params(self):
+        self.parameters['req_param'].append('breaking_the_format')
+        with self.assertRaises(qdb.exceptions.QiitaDBError):
+            qdb.software.Command.create(
+                self.software, "Test command", "Testing command",
+                self.parameters)
+
+    def test_create_error_unsupported_parameter_type(self):
+        self.parameters['opt_int_param'][0] = 'unsupported_type'
+        with self.assertRaises(qdb.exceptions.QiitaDBError):
+            qdb.software.Command.create(
+                self.software, "Test command", "Testing command",
+                self.parameters)
+
+    def test_create_error_bad_default_choice(self):
+        self.parameters['opt_choice_param'][1] = 'unsupported_choice'
+        with self.assertRaises(qdb.exceptions.QiitaDBError):
+            qdb.software.Command.create(
+                self.software, "Test command", "Testing command",
+                self.parameters)
+
+    def test_create_error_duplicate(self):
+        with self.assertRaises(qdb.exceptions.QiitaDBDuplicateError):
+            qdb.software.Command.create(
+                self.software, "Split libraries",
+                "This is a command for testing", self.parameters)
+
+    def test_create(self):
+        obs = qdb.software.Command.create(
+            self.software, "Test Command", "This is a command for testing",
+            self.parameters)
+        self.assertEqual(obs.name, "Test Command")
+        self.assertEqual(obs.description, "This is a command for testing")
+        self.assertEqual(obs.parameters, self.parameters)
+        exp_required = {'req_param': 'string'}
+        self.assertEqual(obs.required_parameters, exp_required)
+        exp_optional = {
+            'opt_int_param': ['integer', '4'],
+            'opt_choice_param': ['choice:["opt1", "opt2"]', 'opt1']}
+        self.assertEqual(obs.optional_parameters, exp_optional)
 
     def test_software(self):
         self.assertEqual(qdb.software.Command(1).software,
@@ -85,8 +105,7 @@ class CommandTestsReadOnly(TestCase):
                       'rev_comp': ['bool', 'False'],
                       'rev_comp_barcode': ['bool', 'False'],
                       'rev_comp_mapping_barcodes': ['bool', 'False'],
-                      'sequence_max_n': ['integer', '0'],
-                      'phred_offset': ['string', '']}
+                      'sequence_max_n': ['integer', '0']}
         self.assertEqual(qdb.software.Command(1).parameters, exp_params)
         exp_params = {
             'barcode_type': ['string', 'golay_12'],
@@ -110,21 +129,11 @@ class CommandTestsReadOnly(TestCase):
         self.assertEqual(qdb.software.Command(2).parameters, exp_params)
 
     def test_required_parameters(self):
-        exp_params = {
-            'input_data': ('artifact', ['FASTQ', 'per_sample_FASTQ'])}
-        obs = qdb.software.Command(1).required_parameters
-        self.assertItemsEqual(obs.keys(), exp_params.keys())
-        self.assertEqual(obs['input_data'][0],  exp_params['input_data'][0])
-        self.assertItemsEqual(obs['input_data'][1],
-                              exp_params['input_data'][1])
-
-        exp_params = {
-            'input_data': ('artifact', ['SFF', 'FASTA', 'FASTA_Sanger'])}
-        obs = qdb.software.Command(2).required_parameters
-        self.assertItemsEqual(obs.keys(), exp_params.keys())
-        self.assertEqual(obs['input_data'][0],  exp_params['input_data'][0])
-        self.assertItemsEqual(obs['input_data'][1],
-                              exp_params['input_data'][1])
+        exp_params = {'input_data': 'artifact'}
+        self.assertEqual(qdb.software.Command(1).required_parameters,
+                         exp_params)
+        self.assertEqual(qdb.software.Command(2).required_parameters,
+                         exp_params)
 
     def test_optional_parameters(self):
         exp_params = {'barcode_type': ['string', 'golay_12'],
@@ -135,8 +144,7 @@ class CommandTestsReadOnly(TestCase):
                       'rev_comp': ['bool', 'False'],
                       'rev_comp_barcode': ['bool', 'False'],
                       'rev_comp_mapping_barcodes': ['bool', 'False'],
-                      'sequence_max_n': ['integer', '0'],
-                      'phred_offset': ['string', '']}
+                      'sequence_max_n': ['integer', '0']}
         self.assertEqual(qdb.software.Command(1).optional_parameters,
                          exp_params)
         exp_params = exp_params = {
@@ -168,9 +176,7 @@ class CommandTestsReadOnly(TestCase):
                qdb.software.DefaultParameters(4),
                qdb.software.DefaultParameters(5),
                qdb.software.DefaultParameters(6),
-               qdb.software.DefaultParameters(7),
-               qdb.software.DefaultParameters(11),
-               qdb.software.DefaultParameters(12)]
+               qdb.software.DefaultParameters(7)]
         self.assertEqual(obs, exp)
 
         obs = list(qdb.software.Command(2).default_parameter_sets)
@@ -178,85 +184,37 @@ class CommandTestsReadOnly(TestCase):
                qdb.software.DefaultParameters(9)]
         self.assertEqual(obs, exp)
 
-    def test_outputs(self):
-        obs = qdb.software.Command(1).outputs
-        exp = [['demultiplexed', 'Demultiplexed']]
-        self.assertEqual(obs, exp)
-
-        obs = qdb.software.Command(2).outputs
-        exp = [['demultiplexed', 'Demultiplexed']]
-        self.assertEqual(obs, exp)
-
-        obs = qdb.software.Command(3).outputs
-        exp = [['OTU table', 'BIOM']]
-        self.assertEqual(obs, exp)
-
 
 @qiita_test_checker()
-class CommandTests(TestCase):
-    def setUp(self):
-        self.software = qdb.software.Software(1)
-        self.parameters = {
-            'req_param': ['string', None],
-            'opt_int_param': ['integer', '4'],
-            'opt_choice_param': ['choice:["opt1", "opt2"]', 'opt1']}
-
-    def test_create_error(self):
-        #  no parameters
-        with self.assertRaises(qdb.exceptions.QiitaDBError):
-            qdb.software.Command.create(
-                self.software, "Test command", "Testing command", {})
-
-        with self.assertRaises(qdb.exceptions.QiitaDBError):
-            qdb.software.Command.create(
-                self.software, "Test command", "Testing command", None)
-
-        # malformed params
-        parameters = deepcopy(self.parameters)
-        parameters['req_param'].append('breaking_the_format')
-        with self.assertRaises(qdb.exceptions.QiitaDBError):
-            qdb.software.Command.create(
-                self.software, "Test command", "Testing command",
-                parameters)
-
-        # unsupported parameter type
-        parameters = deepcopy(self.parameters)
-        parameters['opt_int_param'][0] = 'unsupported_type'
-        with self.assertRaises(qdb.exceptions.QiitaDBError):
-            qdb.software.Command.create(
-                self.software, "Test command", "Testing command",
-                parameters)
-
-        # bad default choice
-        parameters = deepcopy(self.parameters)
-        parameters['opt_choice_param'][1] = 'unsupported_choice'
-        with self.assertRaises(qdb.exceptions.QiitaDBError):
-            qdb.software.Command.create(
-                self.software, "Test command", "Testing command",
-                parameters)
-
-        # duplicate
-        with self.assertRaises(qdb.exceptions.QiitaDBDuplicateError):
-            qdb.software.Command.create(
-                self.software, "Split libraries",
-                "This is a command for testing", self.parameters)
-
+class SoftwareTests(TestCase):
     def test_create(self):
-        obs = qdb.software.Command.create(
-            self.software, "Test Command", "This is a command for testing",
-            self.parameters)
-        self.assertEqual(obs.name, "Test Command")
-        self.assertEqual(obs.description, "This is a command for testing")
-        self.assertEqual(obs.parameters, self.parameters)
-        exp_required = {'req_param': ('string', [None])}
-        self.assertEqual(obs.required_parameters, exp_required)
-        exp_optional = {
-            'opt_int_param': ['integer', '4'],
-            'opt_choice_param': ['choice:["opt1", "opt2"]', 'opt1']}
-        self.assertEqual(obs.optional_parameters, exp_optional)
+        obs = qdb.software.Software.create(
+            "New Software", "0.1.0",
+            "This is adding a new software for testing", "env_name",
+            "start_plugin")
+        self.assertEqual(obs.name, "New Software")
+        self.assertEqual(obs.version, "0.1.0")
+        self.assertEqual(obs.description,
+                         "This is adding a new software for testing")
+        self.assertEqual(obs.commands, [])
+        self.assertEqual(obs.publications, [])
+        self.assertEqual(obs.environment_script, 'env_name')
+        self.assertEqual(obs.start_script, 'start_plugin')
 
+    def test_create_with_publications(self):
+        exp_publications = [['10.1000/nmeth.f.101', '12345678']]
+        obs = qdb.software.Software.create(
+            "Published Software", "1.0.0", "Another testing software",
+            "env_name", "start_plugin",
+            publications=exp_publications)
+        self.assertEqual(obs.name, "Published Software")
+        self.assertEqual(obs.version, "1.0.0")
+        self.assertEqual(obs.description, "Another testing software")
+        self.assertEqual(obs.commands, [])
+        self.assertEqual(obs.publications, exp_publications)
+        self.assertEqual(obs.environment_script, 'env_name')
+        self.assertEqual(obs.start_script, 'start_plugin')
 
-class SoftwareTestsReadOnly(TestCase):
     def test_name(self):
         self.assertEqual(qdb.software.Software(1).name, "QIIME")
 
@@ -278,58 +236,6 @@ class SoftwareTestsReadOnly(TestCase):
         self.assertEqual(qdb.software.Software(1).publications,
                          [['10.1038/nmeth.f.303', '20383131']])
 
-    def test_environment_script(self):
-        tester = qdb.software.Software(1)
-        self.assertEqual(tester.environment_script, 'source activate qiita')
-
-    def test_start_script(self):
-        tester = qdb.software.Software(1)
-        self.assertEqual(tester.start_script, 'start_target_gene')
-
-    def test_default_workflows(self):
-        obs = list(qdb.software.Software(1).default_workflows)
-        exp = [qdb.software.DefaultWorkflow(1),
-               qdb.software.DefaultWorkflow(2),
-               qdb.software.DefaultWorkflow(3)]
-        self.assertEqual(obs, exp)
-
-    def test_type(self):
-        self.assertEqual(qdb.software.Software(1).type,
-                         "artifact transformation")
-
-
-@qiita_test_checker()
-class SoftwareTests(TestCase):
-    def test_create(self):
-        obs = qdb.software.Software.create(
-            "New Software", "0.1.0",
-            "This is adding a new software for testing", "env_name",
-            "start_plugin", "artifact transformation")
-        self.assertEqual(obs.name, "New Software")
-        self.assertEqual(obs.version, "0.1.0")
-        self.assertEqual(obs.description,
-                         "This is adding a new software for testing")
-        self.assertEqual(obs.commands, [])
-        self.assertEqual(obs.publications, [])
-        self.assertEqual(obs.environment_script, 'env_name')
-        self.assertEqual(obs.start_script, 'start_plugin')
-        self.assertEqual(obs.type, 'artifact transformation')
-
-        # create with publications
-        exp_publications = [['10.1000/nmeth.f.101', '12345678']]
-        obs = qdb.software.Software.create(
-            "Published Software", "1.0.0", "Another testing software",
-            "env_name", "start_plugin", "artifact transformation",
-            publications=exp_publications)
-        self.assertEqual(obs.name, "Published Software")
-        self.assertEqual(obs.version, "1.0.0")
-        self.assertEqual(obs.description, "Another testing software")
-        self.assertEqual(obs.commands, [])
-        self.assertEqual(obs.publications, exp_publications)
-        self.assertEqual(obs.environment_script, 'env_name')
-        self.assertEqual(obs.start_script, 'start_plugin')
-        self.assertEqual(obs.type, 'artifact transformation')
-
     def test_add_publications(self):
         tester = qdb.software.Software(1)
         self.assertEqual(tester.publications,
@@ -339,8 +245,17 @@ class SoftwareTests(TestCase):
                ['10.1000/nmeth.f.101', '12345678']]
         self.assertItemsEqual(tester.publications, exp)
 
+    def test_environment_script(self):
+        tester = qdb.software.Software(1)
+        self.assertEqual(tester.environment_script, 'source activate qiita')
 
-class DefaultParametersTestsReadOnly(TestCase):
+    def test_start_script(self):
+        tester = qdb.software.Software(1)
+        self.assertEqual(tester.start_script, 'start_target_gene')
+
+
+@qiita_test_checker()
+class DefaultParametersTests(TestCase):
     def test_exists(self):
         cmd = qdb.software.Command(1)
         obs = qdb.software.DefaultParameters.exists(
@@ -348,7 +263,7 @@ class DefaultParametersTestsReadOnly(TestCase):
             sequence_max_n=0, rev_comp_barcode=False,
             rev_comp_mapping_barcodes=False, rev_comp=False,
             phred_quality_threshold=3, barcode_type="golay_12",
-            max_barcode_errors=1.5, phred_offset='')
+            max_barcode_errors=1.5)
         self.assertTrue(obs)
 
         obs = qdb.software.DefaultParameters.exists(
@@ -356,8 +271,26 @@ class DefaultParametersTestsReadOnly(TestCase):
             sequence_max_n=0, rev_comp_barcode=False,
             rev_comp_mapping_barcodes=False, rev_comp=False,
             phred_quality_threshold=3, barcode_type="hamming_8",
-            max_barcode_errors=1.5, phred_offset='')
+            max_barcode_errors=1.5)
         self.assertFalse(obs)
+
+    def test_create(self):
+        cmd = qdb.software.Command(1)
+        obs = qdb.software.DefaultParameters.create(
+            "test_create", cmd, max_bad_run_length=3,
+            min_per_read_length_fraction=0.75, sequence_max_n=0,
+            rev_comp_barcode=False, rev_comp_mapping_barcodes=False,
+            rev_comp=False, phred_quality_threshold=3,
+            barcode_type="hamming_8", max_barcode_errors=1.5)
+        self.assertEqual(obs.name, "test_create")
+
+        exp = {'max_bad_run_length': 3, 'min_per_read_length_fraction': 0.75,
+               'sequence_max_n': 0, 'rev_comp_barcode': False,
+               'rev_comp_mapping_barcodes': False, 'rev_comp': False,
+               'phred_quality_threshold': 3, 'barcode_type': "hamming_8",
+               'max_barcode_errors': 1.5}
+        self.assertEqual(obs.values, exp)
+        self.assertEqual(obs.command, cmd)
 
     def test_name(self):
         self.assertEqual(qdb.software.DefaultParameters(1).name, "Defaults")
@@ -367,8 +300,7 @@ class DefaultParametersTestsReadOnly(TestCase):
                'max_barcode_errors': 1.5, 'max_bad_run_length': 3,
                'rev_comp': False, 'phred_quality_threshold': 3,
                'rev_comp_barcode': False, 'sequence_max_n': 0,
-               'barcode_type': 'golay_12', 'rev_comp_mapping_barcodes': False,
-               'phred_offset': ''}
+               'barcode_type': 'golay_12', 'rev_comp_mapping_barcodes': False}
         self.assertEqual(qdb.software.DefaultParameters(1).values, exp)
 
     def test_command(self):
@@ -377,27 +309,6 @@ class DefaultParametersTestsReadOnly(TestCase):
 
 
 @qiita_test_checker()
-class DefaultParametersTests(TestCase):
-    def test_create(self):
-        cmd = qdb.software.Command(1)
-        obs = qdb.software.DefaultParameters.create(
-            "test_create", cmd, max_bad_run_length=3,
-            min_per_read_length_fraction=0.75, sequence_max_n=0,
-            rev_comp_barcode=False, rev_comp_mapping_barcodes=False,
-            rev_comp=False, phred_quality_threshold=3,
-            barcode_type="hamming_8", max_barcode_errors=1.5,
-            phred_offset='')
-        self.assertEqual(obs.name, "test_create")
-
-        exp = {'max_bad_run_length': 3, 'min_per_read_length_fraction': 0.75,
-               'sequence_max_n': 0, 'rev_comp_barcode': False,
-               'rev_comp_mapping_barcodes': False, 'rev_comp': False,
-               'phred_quality_threshold': 3, 'barcode_type': "hamming_8",
-               'max_barcode_errors': 1.5, 'phred_offset': ''}
-        self.assertEqual(obs.values, exp)
-        self.assertEqual(obs.command, cmd)
-
-
 class ParametersTests(TestCase):
     def test_init_error(self):
         with self.assertRaises(
@@ -429,7 +340,7 @@ class ParametersTests(TestCase):
                     '"max_bad_run_length": 3, "max_barcode_errors": 1.5, '
                     '"min_per_read_length_fraction": 0.75, '
                     '"phred_quality_threshold": 3, "rev_comp": false, '
-                    '"rev_comp_barcode": false, "phred_offset": "", '
+                    '"rev_comp_barcode": false, '
                     '"rev_comp_mapping_barcodes": false, "sequence_max_n": 0}')
         cmd = qdb.software.Command(1)
         obs = qdb.software.Parameters.load(cmd, json_str=json_str)
@@ -439,7 +350,7 @@ class ParametersTests(TestCase):
             "min_per_read_length_fraction": 0.75,
             "phred_quality_threshold": 3, "rev_comp": False,
             "rev_comp_barcode": False, "rev_comp_mapping_barcodes": False,
-            "sequence_max_n": 0, "phred_offset": ""}
+            "sequence_max_n": 0}
         self.assertEqual(obs.values, exp_values)
 
     def test_load_dictionary(self):
@@ -449,7 +360,7 @@ class ParametersTests(TestCase):
             "min_per_read_length_fraction": 0.75,
             "phred_quality_threshold": 3, "rev_comp": False,
             "rev_comp_barcode": False, "rev_comp_mapping_barcodes": False,
-            "sequence_max_n": 0, "phred_offset": ""}
+            "sequence_max_n": 0}
         cmd = qdb.software.Command(1)
         obs = qdb.software.Parameters.load(cmd, values_dict=exp_values)
         self.assertEqual(obs.values, exp_values)
@@ -459,31 +370,29 @@ class ParametersTests(TestCase):
                     '"max_bad_run_length": 3, "max_barcode_errors": 1.5, '
                     '"min_per_read_length_fraction": 0.75, '
                     '"phred_quality_threshold": 3, "rev_comp": false, '
-                    '"rev_comp_barcode": false, "phred_offset": "", '
+                    '"rev_comp_barcode": false, '
                     '"rev_comp_mapping_barcodes": false, "sequence_max_n": 0}')
         cmd = qdb.software.Command(1)
         with self.assertRaises(qdb.exceptions.QiitaDBError):
             qdb.software.Parameters.load(cmd, json_str=json_str)
 
-    def test_load_loads_defaults(self):
-        values = {
-            "barcode_type": "golay_12", "input_data": 1,
-            "phred_quality_threshold": 3, "rev_comp": False,
-            "rev_comp_barcode": False, "rev_comp_mapping_barcodes": False,
-            "sequence_max_n": 0, "phred_offset": ""}
+    def test_load_error_missing_optional(self):
+        json_str = ('{"barcode_type": "golay_12", "input_data": 1, '
+                    '"max_bad_run_length": 3, "max_barcode_errors": 1.5, '
+                    '"min_per_read_length_fraction": 0.75, '
+                    '"rev_comp": false, '
+                    '"rev_comp_barcode": false, '
+                    '"rev_comp_mapping_barcodes": false, "sequence_max_n": 0}')
         cmd = qdb.software.Command(1)
-        obs = qdb.software.Parameters.load(cmd, values_dict=values)
-        values.update({
-            "max_bad_run_length": '3', "max_barcode_errors": '1.5',
-            "min_per_read_length_fraction": '0.75'})
-        self.assertEqual(obs.values, values)
+        with self.assertRaises(qdb.exceptions.QiitaDBError):
+            qdb.software.Parameters.load(cmd, json_str=json_str)
 
     def test_load_error_extra_parameters(self):
         json_str = ('{"barcode_type": "golay_12", "input_data": 1, '
                     '"max_bad_run_length": 3, "max_barcode_errors": 1.5, '
                     '"min_per_read_length_fraction": 0.75, '
                     '"phred_quality_threshold": 3, "rev_comp": false, '
-                    '"rev_comp_barcode": false, "phred_offset": "",'
+                    '"rev_comp_barcode": false, '
                     '"rev_comp_mapping_barcodes": false, "sequence_max_n": 0,'
                     '"extra_param": 1}')
         cmd = qdb.software.Command(1)
@@ -499,7 +408,7 @@ class ParametersTests(TestCase):
                'rev_comp': False, 'phred_quality_threshold': 3,
                'rev_comp_barcode': False, 'sequence_max_n': 0,
                'barcode_type': 'golay_12', 'rev_comp_mapping_barcodes': False,
-               'input_data': 1, 'phred_offset': ''}
+               'input_data': 1}
         self.assertEqual(obs._values, exp)
 
         obs = qdb.software.Parameters.from_default_params(
@@ -511,7 +420,7 @@ class ParametersTests(TestCase):
                'rev_comp': False, 'phred_quality_threshold': 3,
                'rev_comp_barcode': False, 'sequence_max_n': 0,
                'barcode_type': 'golay_12', 'rev_comp_mapping_barcodes': False,
-               'input_data': 1, 'phred_offset': ''}
+               'input_data': 1}
         self.assertEqual(obs._values, exp)
 
     def test_from_default_params_error_missing_reqd(self):
@@ -544,7 +453,7 @@ class ParametersTests(TestCase):
                'rev_comp': False, 'phred_quality_threshold': 3,
                'rev_comp_barcode': False, 'sequence_max_n': 0,
                'barcode_type': 'golay_12', 'rev_comp_mapping_barcodes': False,
-               'phred_offset': '', 'input_data': 1}
+               'input_data': 1}
         self.assertEqual(obs, exp)
 
     def test_dumps(self):
@@ -552,66 +461,11 @@ class ParametersTests(TestCase):
             qdb.software.DefaultParameters(1), {'input_data': 1}).dump()
         exp = ('{"barcode_type": "golay_12", "input_data": 1, '
                '"max_bad_run_length": 3, "max_barcode_errors": 1.5, '
-               '"min_per_read_length_fraction": 0.75, "phred_offset": "", '
+               '"min_per_read_length_fraction": 0.75, '
                '"phred_quality_threshold": 3, "rev_comp": false, '
                '"rev_comp_barcode": false, '
                '"rev_comp_mapping_barcodes": false, "sequence_max_n": 0}')
         self.assertEqual(obs, exp)
-
-
-class DefaultWorkflowNodeTests(TestCase):
-    def test_command(self):
-        obs = qdb.software.DefaultWorkflowNode(1)
-        self.assertEqual(obs.command, qdb.software.Command(1))
-
-        obs = qdb.software.DefaultWorkflowNode(2)
-        self.assertEqual(obs.command, qdb.software.Command(3))
-
-    def test_parameters(self):
-        obs = qdb.software.DefaultWorkflowNode(1)
-        self.assertEqual(obs.parameters, qdb.software.DefaultParameters(1))
-
-        obs = qdb.software.DefaultWorkflowNode(2)
-        self.assertEqual(obs.parameters, qdb.software.DefaultParameters(10))
-
-
-class DefaultWorkflowEdgeTests(TestCase):
-    def test_connections(self):
-        tester = qdb.software.DefaultWorkflowEdge(1)
-        obs = tester.connections
-        self.assertEqual(obs, [['demultiplexed', 'input_data']])
-
-
-class DefaultWorkflowTests(TestCase):
-    def test_name(self):
-        self.assertEqual(qdb.software.DefaultWorkflow(1).name,
-                         "FASTQ upstream workflow")
-        self.assertEqual(qdb.software.DefaultWorkflow(2).name,
-                         "FASTA upstream workflow")
-        self.assertEqual(qdb.software.DefaultWorkflow(3).name,
-                         "Per sample FASTQ upstream workflow")
-
-    def test_graph(self):
-        obs = qdb.software.DefaultWorkflow(1).graph
-        self.assertTrue(isinstance(obs, nx.DiGraph))
-        exp = [qdb.software.DefaultWorkflowNode(1),
-               qdb.software.DefaultWorkflowNode(2)]
-        self.assertItemsEqual(obs.nodes(), exp)
-        exp = [(qdb.software.DefaultWorkflowNode(1),
-                qdb.software.DefaultWorkflowNode(2),
-                {'connections': qdb.software.DefaultWorkflowEdge(1)})]
-        self.assertItemsEqual(obs.edges(data=True), exp)
-
-        obs = qdb.software.DefaultWorkflow(2).graph
-        self.assertTrue(isinstance(obs, nx.DiGraph))
-        exp = [qdb.software.DefaultWorkflowNode(3),
-               qdb.software.DefaultWorkflowNode(4)]
-        self.assertItemsEqual(obs.nodes(), exp)
-        exp = [(qdb.software.DefaultWorkflowNode(3),
-                qdb.software.DefaultWorkflowNode(4),
-                {'connections': qdb.software.DefaultWorkflowEdge(2)})]
-        self.assertItemsEqual(obs.edges(data=True), exp)
-
 
 if __name__ == '__main__':
     main()
