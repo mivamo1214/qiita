@@ -15,6 +15,9 @@ from tornado.web import authenticated, HTTPError
 from tornado.gen import coroutine, Task
 from pyparsing import ParseException
 
+from qiita_core.exceptions import IncompetentQiitaDeveloperError
+from qiita_core.util import execute_as_transaction
+from qiita_core.qiita_settings import qiita_config, r_client
 from qiita_db.artifact import Artifact
 from qiita_db.user import User
 from qiita_db.study import Study, StudyPerson
@@ -22,10 +25,15 @@ from qiita_db.search import QiitaStudySearch
 from qiita_db.metadata_template.sample_template import SampleTemplate
 from qiita_db.logger import LogEntry
 from qiita_db.exceptions import QiitaDBIncompatibleDatatypeError
+<<<<<<< HEAD
 from qiita_db.reference import Reference
 from qiita_db.util import get_table_cols, get_pubmed_ids_from_dois
 from qiita_core.exceptions import IncompetentQiitaDeveloperError
 from qiita_core.util import execute_as_transaction
+=======
+from qiita_db.util import (add_message, generate_study_list)
+from qiita_pet.util import EBI_LINKIFIER
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 from qiita_pet.handlers.base_handlers import BaseHandler
 from qiita_pet.handlers.util import (
     study_person_linkifier, doi_linkifier, pubmed_linkifier, check_access)
@@ -168,7 +176,6 @@ def _build_study_info(user, study_proc=None, proc_samples=None):
     -----
     Both study_proc and proc_samples must be passed, or neither passed.
     """
-    build_samples = False
     # Logic check to make sure both needed parts passed
     if study_proc is not None and proc_samples is None:
         raise IncompetentQiitaDeveloperError(
@@ -176,18 +183,33 @@ def _build_study_info(user, study_proc=None, proc_samples=None):
     elif proc_samples is not None and study_proc is None:
         raise IncompetentQiitaDeveloperError(
             'Must pass study_proc when proc_samples given')
-    elif study_proc is None:
-        build_samples = True
 
     # get list of studies for table
+<<<<<<< HEAD
     study_set = user.user_studies.union(
         Study.get_by_status('public')).union(user.shared_studies)
+=======
+    user_study_set = user.user_studies.union(user.shared_studies)
+    if search_type == 'user':
+        if user.level == 'admin':
+            user_study_set = (user_study_set |
+                              Study.get_by_status('sandbox') |
+                              Study.get_by_status('private') |
+                              Study.get_by_status('awaiting_approval') -
+                              Study.get_by_status('public'))
+        study_set = user_study_set
+    elif search_type == 'public':
+        study_set = Study.get_by_status('public') - user_study_set
+    else:
+        raise ValueError('Not a valid search type')
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
     if study_proc is not None:
         study_set = study_set.intersection(study_proc)
     if not study_set:
         # No studies left so no need to continue
         return []
 
+<<<<<<< HEAD
     cols = ['study_id', 'email', 'principal_investigator_id',
             'publication_doi', 'study_title', 'metadata_complete',
             'number_samples_collected', 'study_abstract']
@@ -215,6 +237,10 @@ def _build_study_info(user, study_proc=None, proc_samples=None):
         infolist.append(study_info)
 
     return infolist
+=======
+    return generate_study_list([s.id for s in study_set],
+                               public_only=(search_type == 'public'))
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
 
 class ListStudiesHandler(BaseHandler):
@@ -242,7 +268,8 @@ class StudyApprovalList(BaseHandler):
     def get(self):
         user = self.current_user
         if user.level != 'admin':
-            raise HTTPError(403, 'User %s is not admin' % self.current_user)
+            raise HTTPError(403,
+                            reason='User %s is not admin' % self.current_user)
 
         studies = defaultdict(list)
         for artifact in Artifact.iter_by_visibility('awaiting_approval'):
@@ -302,7 +329,13 @@ class SearchStudiesAJAX(BaseHandler):
         echo = int(self.get_argument('sEcho'))
 
         if user != self.current_user.id:
+<<<<<<< HEAD
             raise HTTPError(403, 'Unauthorized search!')
+=======
+            raise HTTPError(403, reason='Unauthorized search!')
+        if search_type not in ['user', 'public']:
+            raise HTTPError(400, reason='Not a valid search type')
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
         if query:
             # Search for samples matching the query
             search = QiitaStudySearch()
@@ -333,8 +366,35 @@ class SearchStudiesAJAX(BaseHandler):
                 return
         else:
             study_proc = proc_samples = None
+<<<<<<< HEAD
         info = _build_study_info(self.current_user, study_proc=study_proc,
                                  proc_samples=proc_samples)
+=======
+        info = _build_study_info(self.current_user, search_type, study_proc,
+                                 proc_samples)
+        # linkifying data
+        len_info = len(info)
+        for i in range(len_info):
+            info[i]['shared'] = ", ".join([study_person_linkifier(element)
+                                           for element in info[i]['shared']])
+
+            ppid = [pubmed_linkifier([p]) for p in info[i]['publication_pid']]
+            pdoi = [doi_linkifier([p]) for p in info[i]['publication_doi']]
+            del info[i]['publication_pid']
+            del info[i]['publication_doi']
+            info[i]['pubs'] = ', '.join(ppid + pdoi)
+
+            info[i]['pi'] = study_person_linkifier(info[i]['pi'])
+
+            info[i]['ebi_info'] = info[i]['ebi_submission_status']
+            ebi_study_accession = info[i]['ebi_study_accession']
+            if ebi_study_accession:
+                info[i]['ebi_info'] = '%s (%s)' % (
+                    ''.join([EBI_LINKIFIER.format(a)
+                             for a in ebi_study_accession.split(',')]),
+                    info[i]['ebi_submission_status'])
+
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
         # build the table json
         results = {
             "sEcho": echo,

@@ -1,17 +1,28 @@
+<<<<<<< HEAD
 #!/usr/bin/env python
 
 from tornado.escape import url_escape, json_encode
 from tornado.web import HTTPError
+=======
+# -----------------------------------------------------------------------------
+# Copyright (c) 2014--, The Qiita Development Team.
+#
+# Distributed under the terms of the BSD 3-clause License.
+#
+# The full license is in the file LICENSE, distributed with this software.
+# -----------------------------------------------------------------------------
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
-from moi import r_client
+from tornado.escape import url_escape, json_encode
 
 from qiita_pet.handlers.base_handlers import BaseHandler
-from qiita_core.qiita_settings import qiita_config
+from qiita_core.qiita_settings import qiita_config, r_client
 from qiita_core.util import send_email, execute_as_transaction
 from qiita_core.exceptions import (IncorrectPasswordError, IncorrectEmailError,
                                    UnverifiedEmailError)
 from qiita_db.user import User
-from qiita_db.exceptions import QiitaDBUnknownIDError, QiitaDBDuplicateError
+from qiita_db.exceptions import (QiitaDBUnknownIDError, QiitaDBDuplicateError,
+                                 QiitaDBError)
 # login code modified from https://gist.github.com/guillaumevincent/4771570
 
 
@@ -21,7 +32,7 @@ class AuthCreateHandler(BaseHandler):
         try:
             error_message = self.get_argument("error")
         # Tornado can raise an Exception directly, not a defined type
-        except:
+        except Exception:
             error_message = ""
         self.render("create_user.html", error=error_message)
 
@@ -46,10 +57,19 @@ class AuthCreateHandler(BaseHandler):
             try:
                 send_email(username, "QIITA: Verify Email Address", "Please "
                            "click the following link to verify email address: "
+<<<<<<< HEAD
                            "%s/auth/verify/%s?email=%s"
                            % (qiita_config.base_url, info['user_verify_code'],
                               url_escape(username)))
             except:
+=======
+                           "%s/auth/verify/%s?email=%s\n\nBy clicking you are "
+                           "accepting our term and conditions: "
+                           "%s/iframe/?iframe=qiita-terms"
+                           % (url, info['user_verify_code'],
+                              url_escape(username), url))
+            except Exception:
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
                 msg = ("Unable to send verification email. Please contact the "
                        "qiita developers at <a href='mailto:qiita-help"
                        "@gmail.com'>qiita-help@gmail.com</a>")
@@ -64,12 +84,23 @@ class AuthCreateHandler(BaseHandler):
 class AuthVerifyHandler(BaseHandler):
     def get(self, code):
         email = self.get_argument("email").strip().lower()
-        if User.verify_code(email, code, "create"):
-            msg = "Successfully verified user! You are now free to log in."
+
+        code_is_valid = False
+        msg = "This code is not valid."
+
+        # an exception is raised if the 'code type' is not available, otherwise
+        # the method determines the validity of the code
+        try:
+            code_is_valid = User.verify_code(email, code, "create")
+        except QiitaDBError:
+            msg = "This user has already created an account."
+
+        if code_is_valid:
+            msg = "Successfully verified user. You are now free to log in."
             color = "black"
         else:
-            msg = "Code not valid!"
             color = "red"
+
         self.render("user_verified.html", msg=msg, color=color,
                     email=self.get_argument("email").strip())
 
@@ -81,9 +112,6 @@ class AuthLoginHandler(BaseHandler):
 
     @execute_as_transaction
     def post(self):
-        if r_client.get('maintenance') is not None:
-            raise HTTPError(503, "Site is down for maintenance")
-
         username = self.get_argument("username", "").strip().lower()
         passwd = self.get_argument("password", "")
         nextpage = self.get_argument("next", None)

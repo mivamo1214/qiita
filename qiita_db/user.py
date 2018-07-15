@@ -15,10 +15,6 @@ Classes
    :toctree: generated/
 
    User
-
-Examples
---------
-TODO
 """
 # -----------------------------------------------------------------------------
 # Copyright (c) 2014--, The Qiita Development Team.
@@ -53,6 +49,7 @@ class User(qdb.base.QiitaObject):
     private_analyses
     shared_analyses
     unread_messages
+    jobs
 
     Methods
     -------
@@ -307,9 +304,8 @@ class User(qdb.base.QiitaObject):
                     qdb.sql_connection.TRN.add(sql)
 
                     an_sql = """INSERT INTO qiita.analysis
-                                    (email, name, description, dflt,
-                                     analysis_status_id)
-                                VALUES (%s, %s, %s, %s, 1)
+                                    (email, name, description, dflt)
+                                VALUES (%s, %s, %s, %s)
                                 RETURNING analysis_id"""
                     ap_sql = """INSERT INTO qiita.analysis_portal
                                     (analysis_id, portal_type_id)
@@ -614,6 +610,54 @@ class User(qdb.base.QiitaObject):
                           WHERE expiration IS NOT NULL)"""
             qdb.sql_connection.TRN.add(sql)
             qdb.sql_connection.TRN.execute()
+
+    def jobs(self, limit=30, ignore_status=['success'], show_hidden=False):
+        """Return jobs created by the user
+
+        Parameters
+        ----------
+        limit : int, optional
+            max number of rows to return
+        ignore_status: list of str, optional
+            don't retieve jobs that have one of these status
+        show_hidden: bool, optional
+            If true, return all jobs, including the hidden ones
+
+        Returns
+        -------
+        list of ProcessingJob
+
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT processing_job_id
+                     FROM qiita.processing_job
+                     LEFT JOIN qiita.processing_job_status
+                        USING (processing_job_status_id)
+                     WHERE email = %s
+                  """
+
+            if ignore_status:
+                sql_info = [self._id, tuple(ignore_status), limit]
+                sql += "    AND processing_job_status NOT IN %s"
+            else:
+                sql_info = [self._id, limit]
+
+            if not show_hidden:
+                sql += ' AND hidden = false'
+
+            sql += """
+                     ORDER BY CASE processing_job_status
+                            WHEN 'in_construction' THEN 1
+                            WHEN 'running' THEN 2
+                            WHEN 'queued' THEN 3
+                            WHEN 'waiting' THEN 4
+                            WHEN 'error' THEN 5
+                            WHEN 'success' THEN 6
+                        END, heartbeat DESC LIMIT %s"""
+
+            qdb.sql_connection.TRN.add(sql, sql_info)
+            return [qdb.processing_job.ProcessingJob(p[0])
+                    for p in qdb.sql_connection.TRN.execute_fetchindex()]
 
 
 def validate_email(email):

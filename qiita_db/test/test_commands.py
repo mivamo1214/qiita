@@ -98,7 +98,7 @@ class TestLoadArtifactFromCmd(TestCase):
                              'instrument_model': 'Illumina MiSeq',
                              'library_construction_protocol': 'AAAA',
                              'experiment_design_description': 'BBBB'}},
-            orient='index')
+            orient='index', dtype=str)
         pt = qdb.metadata_template.prep_template.PrepTemplate.create(
             metadata, qdb.study.Study(1), "16S")
         obs = qdb.commands.load_artifact_from_cmd(
@@ -170,7 +170,7 @@ class TestLoadSampleTemplateFromCmd(TestCase):
             "lab_person_id": qdb.study.StudyPerson(1)
         }
         self.study = qdb.study.Study.create(
-            qdb.user.User('test@foo.bar'), "Test study", [1], info)
+            qdb.user.User('test@foo.bar'), "Test study", info)
 
     def test_load_sample_template_from_cmd(self):
         """Correctly adds a sample template to the DB"""
@@ -213,6 +213,7 @@ class TestLoadParametersFromCmd(TestCase):
             if exists(fp):
                 remove(fp)
 
+<<<<<<< HEAD
     def test_load_parameters_from_cmd_error(self):
         with self.assertRaises(qdb.exceptions.QiitaDBUnknownIDError):
             qdb.commands.load_parameters_from_cmd(
@@ -236,6 +237,8 @@ class TestLoadParametersFromCmd(TestCase):
                "sequence_max_n": "0"}
         self.assertEqual(obs, exp)
 
+=======
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
 @qiita_test_checker()
 class TestPatch(TestCase):
@@ -256,6 +259,9 @@ class TestPatch(TestCase):
 
     def tearDown(self):
         rmtree(self.patches_dir)
+        # The tests on this class are really tied up to the status of the
+        # database, so we do an exception and reset the DB in each test
+        qdb.environment_manager.drop_and_rebuild_tst_database()
 
     def _check_patchtest2(self, exists=True):
         if exists:
@@ -376,7 +382,8 @@ class TestUpdateArtifactFromCmd(TestCase):
         new_files = set(new_uploaded_files).difference(self.uploaded_files)
         path_builder = partial(
             join, qdb.util.get_mountpoint("uploads")[0][1], '1')
-        self._clean_up_files.extend([path_builder(fp) for _, fp in new_files])
+        self._clean_up_files.extend(
+            [path_builder(fp) for _, fp, _ in new_files])
         for f in self._clean_up_files:
             if exists(f):
                 remove(f)
@@ -441,22 +448,22 @@ SAMPLE_TEMPLATE = (
     "sample_type\tphysical_specimen_remaining\tphysical_specimen_location\t"
     "dna_extracted\thost_subject_id\tTreatment\tDOB\tlatitude\tlongitude"
     "\ttaxon_id\tscientific_name\tDescription\n"
-    "PC.354\treceived\t2014-06-18 16:44\ttype_1\tTrue\tLocation_1\tTrue\t"
+    "PC.354\treceived\t06/18/14 16:44:00\ttype_1\tTrue\tLocation_1\tTrue\t"
     "HS_ID_PC.354\tControl\t20061218\t1.88401499993\t56.0003871552\t"
     "9606\thomo sapiens\tControl_mouse_I.D._354\n"
-    "PC.593\treceived\t2014-06-18 16:44\ttype_1\tTrue\tLocation_1\tTrue\t"
+    "PC.593\treceived\t06/18/14 16:44:00\ttype_1\tTrue\tLocation_1\tTrue\t"
     "HS_ID_PC.593\tControl\t20071210\t35.4079458313\t83.2595338611\t"
     "9606\thomo sapiens\tControl_mouse_I.D._593\n"
-    "PC.607\treceived\t2014-06-18 16:44\ttype_1\tTrue\tLocation_1\tTrue\t"
+    "PC.607\treceived\t06/18/14 16:44:00\ttype_1\tTrue\tLocation_1\tTrue\t"
     "HS_ID_PC.607\tFast\t20071112\t18.3175615444\t91.3713989729\t"
     "9606\thomo sapiens\tFasting_mouse_I.D._607\n"
-    "PC.636\treceived\t2014-06-18 16:44\ttype_1\tTrue\tLocation_1\tTrue\t"
+    "PC.636\treceived\t06/18/14 16:44:00\ttype_1\tTrue\tLocation_1\tTrue\t"
     "HS_ID_PC.636\tFast\t20080116\t31.0856060708\t4.16781143893\t"
     "9606\thomo sapiens\tFasting_mouse_I.D._636")
 
 PREP_TEMPLATE = (
     'sample_name\tbarcode\tcenter_name\tcenter_project_name\t'
-    'description\tebi_submission_accession\temp_status\tprimer\t'
+    'description_prep\tebi_submission_accession\temp_status\tprimer\t'
     'run_prefix\tstr_column\tplatform\tlibrary_construction_protocol\t'
     'experiment_design_description\tinstrument_model\n'
     'SKB7.640196\tCCTCTGAGAGCT\tANL\tTest Project\tskb7\tNone\tEMP\t'
@@ -500,6 +507,7 @@ phred_quality_threshold\t3
 barcode_type\thamming_8
 max_barcode_errors\t1.5
 """
+
 
 if __name__ == "__main__":
     main()

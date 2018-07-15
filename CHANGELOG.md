@@ -1,7 +1,18 @@
 # Qiita changelog
 
-Version 0.2.0-dev (Changes since version 0.2.0 go here)
--------------------------------------------------------
+Version 062018
+--------------
+
+* We haven't updated the ChangeLog for a while (since circa 2015). Anyway, we will ask developers to add an entry for any new features in Qiita.
+* Now you can select or unselect all files in the upload folder.
+* Added circle color explanation in the processing network.
+* Fixed error in the sample info category summary (https://github.com/biocore/qiita/issues/2610).
+* Qiimp has been added to the Qiita GUI.
+* We added the qt-shogun plugin.
+* Adding qiita_db.processing_job.ProcessingJob.validator_jobs to remove duplicated code.
+
+Version 0.2.0-dev
+-----------------
 
 * Users can now change values and add samples and/or columns to sample and prep templates using the <kbd>Update</kbd> button (see the prep template and sample template tabs).
 * The raw files of a RawData can be now updated using the `qiita db update_raw_data` CLI command.
@@ -13,6 +24,7 @@ Version 0.2.0-dev (Changes since version 0.2.0 go here)
 * QIIME workflows for splitting libraries (SFF/FASTA-QUAL and FASTQ/per-sample-FASTQ) and for picking OTUs has been moved to a new target gene plugin.
 * An initial RESTapi has been introduced as a result of the plugin system, in which OAuth2 authentication is required to access the data.
 * The system has been ported to use HTTPS instead of HTTP.
+* The website now supports Mozilla Firefox 48 and above.
 
 Version 0.2.0 (2015-08-25)
 --------------------------

@@ -9,6 +9,7 @@
 from __future__ import division
 from os.path import join
 from time import strftime
+from future.utils import viewitems
 
 from qiita_core.exceptions import IncompetentQiitaDeveloperError
 
@@ -26,7 +27,6 @@ class Sample(BaseSample):
     """
     _table = "study_sample"
     _table_prefix = "sample_"
-    _column_table = "study_sample_columns"
     _id_column = "study_id"
 
     def _check_template_class(self, md_template):
@@ -57,25 +57,9 @@ class SampleTemplate(MetadataTemplate):
     """
     _table = "study_sample"
     _table_prefix = "sample_"
-    _column_table = "study_sample_columns"
     _id_column = "study_id"
     _sample_cls = Sample
     _filepath_table = 'sample_template_filepath'
-
-    @staticmethod
-    def metadata_headers():
-        """Returns metadata headers available
-
-        Returns
-        -------
-        list
-            Alphabetical list of all metadata headers available
-        """
-        with qdb.sql_connection.TRN:
-            sql = """SELECT DISTINCT column_name
-                     FROM qiita.study_sample_columns ORDER BY column_name"""
-            qdb.sql_connection.TRN.add(sql)
-            return qdb.sql_connection.TRN.execute_fetchflatten()
 
     @classmethod
     def create(cls, md_template, study):
@@ -97,13 +81,13 @@ class SampleTemplate(MetadataTemplate):
                     cls.__name__, 'id: %d' % study.id)
 
             # Clean and validate the metadata template given
-            md_template = cls._clean_validate_template(
-                md_template, study.id,
-                qdb.metadata_template.constants.SAMPLE_TEMPLATE_COLUMNS)
+            md_template = cls._clean_validate_template(md_template, study.id)
 
             cls._common_creation_steps(md_template, study.id)
 
             st = cls(study.id)
+            st.validate(
+                qdb.metadata_template.constants.SAMPLE_TEMPLATE_COLUMNS)
             st.generate_files()
 
             return st
@@ -155,10 +139,6 @@ class SampleTemplate(MetadataTemplate):
                 cls._table, cls._id_column)
             qdb.sql_connection.TRN.add(sql, args)
 
-            sql = "DELETE FROM qiita.{0} WHERE {1} = %s".format(
-                cls._column_table, cls._id_column)
-            qdb.sql_connection.TRN.add(sql, args)
-
             qdb.sql_connection.TRN.execute()
 
     @property
@@ -182,6 +162,29 @@ class SampleTemplate(MetadataTemplate):
             The dict of restictions
         """
         return qdb.metadata_template.constants.SAMPLE_TEMPLATE_COLUMNS
+
+    def delete_sample(self, sample_name):
+        """Delete `sample_name` from sample information file
+
+        Parameters
+        ----------
+        sample_name : str
+            The sample name to be deleted
+
+        Raises
+        ------
+        QiitaDBOperationNotPermittedError
+            If the `sample_name` has been used in a prep info file
+        """
+        pts = {pt.id: pt.get(sample_name) is not None
+               for pt in qdb.study.Study(self.study_id).prep_templates()}
+        if any(pts.values()):
+            pts = ', '.join([str(k) for k, v in viewitems(pts) if v])
+            raise qdb.exceptions.QiitaDBOperationNotPermittedError(
+                "'%s' has been linked in a prep template(s): %s" % (
+                    sample_name, pts))
+
+        self._common_delete_sample_steps(sample_name)
 
     def can_be_updated(self, **kwargs):
         """Whether the template can be updated or not

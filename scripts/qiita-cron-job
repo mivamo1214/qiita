@@ -1,0 +1,63 @@
+#!/usr/bin/env python
+
+# -----------------------------------------------------------------------------
+# Copyright (c) 2014--, The Qiita Development Team.
+#
+# Distributed under the terms of the BSD 3-clause License.
+#
+# The full license is in the file LICENSE, distributed with this software.
+# -----------------------------------------------------------------------------
+
+import click
+
+from qiita_db.util import (
+    purge_filepaths as qiita_purge_filepaths,
+    empty_trash_upload_folder as qiita_empty_trash_upload_folder,
+    purge_files_from_filesystem as qiita_purge_files_from_filesystem)
+from qiita_db.meta_util import (
+    update_redis_stats as qiita_update_redis_stats,
+    generate_biom_and_metadata_release as
+    qiita_generate_biom_and_metadata_release)
+
+
+@click.group()
+def commands():
+    pass
+
+
+@commands.command()
+@click.option('--remove/--no-remove', default=True,
+              help='remove any filepaths from the qiita.filepath table that '
+              'are not linked to any other table')
+def purge_filepaths(remove):
+    qiita_purge_filepaths(remove)
+
+
+@commands.command()
+@click.option('--remove/--no-remove', default=False,
+              help='check the filesystem mounts and remove files not used in '
+              'the database')
+def purge_files_from_filesystem(remove):
+    qiita_purge_files_from_filesystem(remove)
+
+
+@commands.command()
+@click.option('--remove/--no-remove', default=True,
+              help='remove files from the trash folder within the upload '
+              'folders')
+def empty_trash_upload_folder(remove):
+    qiita_empty_trash_upload_folder(remove)
+
+
+@commands.command()
+def update_redis_stats():
+    qiita_update_redis_stats()
+
+
+@commands.command()
+def generate_biom_and_metadata_release():
+    qiita_generate_biom_and_metadata_release('public')
+
+
+if __name__ == "__main__":
+    commands()

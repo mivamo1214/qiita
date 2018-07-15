@@ -1,10 +1,17 @@
+# -----------------------------------------------------------------------------
+# Copyright (c) 2014--, The Qiita Development Team.
+#
+# Distributed under the terms of the BSD 3-clause License.
+#
+# The full license is in the file LICENSE, distributed with this software.
+# -----------------------------------------------------------------------------
+
 from unittest import main
 from qiita_pet.test.tornado_test_base import TestHandlerBase
 from qiita_db.user import User
 
 
 class TestAuthCreateHandler(TestHandlerBase):
-    database = True
 
     def test_get(self):
         response = self.get('/auth/create/')
@@ -21,11 +28,10 @@ class TestAuthCreateHandler(TestHandlerBase):
 
 
 class TestAuthVerifyHandler(TestHandlerBase):
-    database = True
 
     def test_get(self):
         response = self.get('/auth/verify/SOMETHINGHERE?email=test%40foo.bar')
-        self.assertEqual(response.code, 500)
+        self.assertEqual(response.code, 200)
 
         User.create('new@test.com', 'Somesortofpass')
         response = self.get('/auth/verify/SOMETHINGHERE?email=new%40test.bar')

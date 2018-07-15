@@ -14,7 +14,7 @@ import functools
 from traceback import format_exception
 
 from tornado.web import RequestHandler
-from moi import r_client
+from qiita_core.qiita_settings import r_client
 
 from qiita_core.exceptions import (IncorrectPasswordError, IncorrectEmailError,
                                    UnverifiedEmailError)
@@ -133,6 +133,7 @@ class OauthBaseHandler(RequestHandler):
             return
         # log the error
         exc_info = kwargs['exc_info']
+<<<<<<< HEAD
         trace_info = ''.join(['%s\n' % line for line in
                              format_exception(*exc_info)])
         req_dict = self.request.__dict__
@@ -146,6 +147,32 @@ class OauthBaseHandler(RequestHandler):
             'Runtime',
             'ERROR:\n%s\nTRACE:\n%s\nHTTP INFO:\n%s\n' %
             (error, trace_info, request_info))
+=======
+
+        # We don't need to log 403, 404 or 405 failures in the logging table
+        if status_code not in {403, 404, 405}:
+            # log the error
+            error_lines = ['%s\n' % line
+                           for line in format_exception(*exc_info)]
+            trace_info = ''.join(error_lines)
+            req_dict = self.request.__dict__
+            # must trim body to 1024 chars to prevent huge error messages
+            req_dict['body'] = req_dict.get('body', '')[:1024]
+            request_info = ''.join(['<strong>%s</strong>: %s\n' %
+                                   (k, req_dict[k]) for k in
+                                    req_dict.keys() if k != 'files'])
+            error = exc_info[1]
+            qdb.logger.LogEntry.create(
+                'Runtime',
+                'ERROR:\n%s\nTRACE:\n%s\nHTTP INFO:\n%s\n' %
+                (error, trace_info, request_info))
+
+        message = exc_info[1].message
+        if hasattr(exc_info[1], 'log_message'):
+            message = exc_info[1].log_message
+
+        self.finish(message)
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
     def head(self):
         """Adds proper response for head requests"""

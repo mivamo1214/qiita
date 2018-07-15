@@ -25,10 +25,20 @@ def start(env_script, start_script, url, job_id, job_dir):
     # When Popen executes, the shell is not in interactive mode,
     # so it is not sourcing any of the bash configuration files
     # We need to source it so the env_script are available
+<<<<<<< HEAD
     cmd = "source ~/.bash_profile; %s; %s" % (env_script, ' '.join(cmd))
     proc = Popen(cmd, shell=True)
     if proc.returncode and proc.returncode != 0:
         raise ValueError("Error launching the plugin.")
+=======
+    cmd = "bash -c '%s; echo $PATH; %s'" % (env_script, ' '.join(cmd))
+    proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
+    stdout, stderr = proc.communicate()
+    if proc.returncode and proc.returncode != 0:
+        raise ValueError(
+            "Error launching the plugin:\n%s\n\tStdout: %s\n\tStderr: %s"
+            % (cmd, stdout, stderr))
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
 
 if __name__ == '__main__':

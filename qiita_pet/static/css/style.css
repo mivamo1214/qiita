@@ -1,7 +1,53 @@
+/*
+  Original source https://stackoverflow.com/a/18529465
+  Link
+*/
+.navbar-default .navbar-nav > li > a {
+  font-size: 14px;
+  color: #EEE;
+}
+.navbar-default .navbar-nav > li > a:hover,
+.navbar-default .navbar-nav > li > a:focus {
+  color: #CCC;
+}
+/* Link END */
+
+#qiita-main {
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
 #template-content{
   padding: 10px;
   height: 100%;
   width: 100%;
+}
+
+td.more-info-processing-jobs{
+  cursor: pointer;
+  background: url('../img/details_open.png') no-repeat center center;
+}
+tr.shown td.more-info-processing-jobs{
+  cursor: pointer;
+  background: url('../img/details_close.png') no-repeat center center;
+}
+
+div.details-control{
+  cursor: pointer;
+  background: url('../img/details_open.png') no-repeat center center;
+}
+tr.shown div.details-control{
+  cursor: pointer;
+  background: url('../img/details_close.png') no-repeat center center;
+}
+
+.blinking-message {
+  animation: blinker 2s linear infinite;
+}
+
+@keyframes blinker {
+  50% { opacity: 0.3; background: #CCC;}
+  100% { opacity: 1.0; background: #FFF;}
 }
 
 /* table in the study description that holds the investigation type elements */
@@ -10,10 +56,15 @@
   padding-bottom: 6px;
 }
 
-.dropdown:hover .dropdown-menu {
+.dropdown:hover .dropdown-menu{
     display: block;
  }
 
+/* hover is a pseudoclass and can't be controlled - use the class below to trigger
+the same behavior as the hover pseudoclass */
+.custom-dropdown-menu {
+    display: block;
+}
 
  .info-menu {
     word-wrap: break-word;
@@ -42,6 +93,7 @@
     width:100%;
   }
 
+<<<<<<< HEAD
 /* Make the navbar collapse at medium size, not small.
 Fixes really ugly middle ground where menu stacking occurs
 adapted from http://stackoverflow.com/a/23298184 */
@@ -81,3 +133,10 @@ adapted from http://stackoverflow.com/a/23298184 */
         overflow: hidden!important;
     }
 }
+=======
+.graph {
+  width:100%;
+  height:300px;
+  border: 1px solid #ccc;
+}
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed

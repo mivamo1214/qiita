@@ -1,11 +1,21 @@
+# -----------------------------------------------------------------------------
+# Copyright (c) 2014--, The Qiita Development Team.
+#
+# Distributed under the terms of the BSD 3-clause License.
+#
+# The full license is in the file LICENSE, distributed with this software.
+# -----------------------------------------------------------------------------
+
 from tornado.web import authenticated, HTTPError
 from future.utils import viewitems
 from wtforms import Form, StringField, validators
 
 from qiita_pet.handlers.base_handlers import BaseHandler
+from qiita_pet.handlers.api_proxy import user_jobs_get_req
 from qiita_db.user import User
 from qiita_db.logger import LogEntry
-from qiita_db.exceptions import QiitaDBUnknownIDError
+from qiita_db.exceptions import QiitaDBUnknownIDError, QiitaDBError
+from qiita_core.exceptions import IncorrectPasswordError
 from qiita_core.util import send_email, execute_as_transaction
 from qiita_core.qiita_settings import qiita_config
 
@@ -133,7 +143,14 @@ class ChangeForgotPasswordHandler(BaseHandler):
             level = "danger"
         else:
             newpass = self.get_argument("newpass")
-            changed = user.change_forgot_password(code, newpass)
+            try:
+                changed = user.change_forgot_password(code, newpass)
+            except IncorrectPasswordError:
+                message = "The new password is not valid. Try again."
+                changed = False
+            except QiitaDBError:
+                message = "Invalid code. Request a new one."
+                changed = False
 
             if changed:
                 message = ("Password reset successful. Please log in to "
@@ -141,9 +158,10 @@ class ChangeForgotPasswordHandler(BaseHandler):
                 level = "success"
                 page = "index.html"
             else:
-                message = ("Unable to reset password. Most likely your email "
-                           "is incorrect or your reset window has timed out.")
-
+                if message != "":
+                    message = ("Unable to reset password. Most likely your "
+                               "email is incorrect or your reset window has "
+                               "timed out.")
                 level = "danger"
 
         self.render(page, message=message, level=level, code=code)
@@ -168,7 +186,14 @@ class UserMessagesHander(BaseHandler):
         elif action == "delete":
             self.current_user.delete_messages(messages)
         else:
-            raise HTTPError(400, "Unknown action: %s" % action)
+            raise HTTPError(400, reason="Unknown action: %s" % action)
 
         self.render("user_messages.html",
                     messages=self.current_user.messages())
+
+
+class UserJobs(BaseHandler):
+    @authenticated
+    def get(self):
+        response = user_jobs_get_req(self.current_user)
+        self.write(response)

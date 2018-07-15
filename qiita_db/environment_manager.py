@@ -17,7 +17,7 @@ from future import standard_library
 from future.utils import viewitems
 
 from qiita_core.exceptions import QiitaEnvironmentError
-from qiita_core.qiita_settings import qiita_config
+from qiita_core.qiita_settings import qiita_config, r_client
 import qiita_db as qdb
 
 
@@ -53,8 +53,8 @@ def _check_db_exists(db, conn_handler):
     return (db,) in dbs
 
 
-def create_layout_and_patch(verbose=False):
-    r"""Builds the SQL layout and applies all the patches
+def create_layout(test=False, verbose=False):
+    r"""Builds the SQL layout
 
     Parameters
     ----------
@@ -69,13 +69,8 @@ def create_layout_and_patch(verbose=False):
             qdb.sql_connection.TRN.add(f.read())
         qdb.sql_connection.TRN.execute()
 
-        if verbose:
-            print('Patching Database...')
-        patch(verbose=verbose)
-
 
 def _populate_test_db():
-    print('Populating database with demo data')
     with qdb.sql_connection.TRN:
         with open(POPULATE_FP, 'U') as f:
             qdb.sql_connection.TRN.add(f.read())
@@ -97,7 +92,7 @@ def _add_ontology_data():
         url = 'ftp://ftp.microbio.me/pub/qiita/qiita_ontoandvocab.sql.gz'
         try:
             urlretrieve(url, fp)
-        except:
+        except Exception:
             raise IOError("Error: Could not fetch ontologies file from %s" %
                           url)
 
@@ -142,7 +137,7 @@ def _download_reference_files():
         else:
             try:
                 urlretrieve(url, local_fp)
-            except:
+            except Exception:
                 raise IOError("Error: Could not fetch %s file from %s" %
                               (file_type, url))
     with qdb.sql_connection.TRN:
@@ -192,8 +187,26 @@ def make_environment(load_ontologies, download_reference, add_demo_user):
 
     # Create the database
     print('Creating database')
+    create_settings_table = True
     admin_conn.autocommit = True
-    admin_conn.execute('CREATE DATABASE %s' % qiita_config.database)
+    try:
+        admin_conn.execute('CREATE DATABASE %s' % qiita_config.database)
+    except ValueError as error:
+        # if database exists ignore
+        msg = 'database "%s" already exists' % qiita_config.database
+        if msg in error.message:
+            print("Database exits, let's make sure it's test")
+            with qdb.sql_connection.TRN:
+                # Insert the settings values to the database
+                sql = """SELECT test FROM settings"""
+                qdb.sql_connection.TRN.add(sql)
+                is_test = qdb.sql_connection.TRN.execute_fetchlast()
+                if not is_test:
+                    print('Not a test database')
+                    raise
+                create_settings_table = False
+        else:
+            raise
     admin_conn.autocommit = False
 
     del admin_conn
@@ -201,20 +214,24 @@ def make_environment(load_ontologies, download_reference, add_demo_user):
 
     with qdb.sql_connection.TRN:
         print('Inserting database metadata')
-        # Build the SQL layout into the database
-        with open(SETTINGS_FP, 'U') as f:
-            qdb.sql_connection.TRN.add(f.read())
-        qdb.sql_connection.TRN.execute()
+        test = qiita_config.test_environment
+        verbose = True
+        if create_settings_table:
+            # Build the SQL layout into the database
+            with open(SETTINGS_FP, 'U') as f:
+                qdb.sql_connection.TRN.add(f.read())
+            qdb.sql_connection.TRN.execute()
 
-        # Insert the settings values to the database
-        sql = """INSERT INTO settings (test, base_data_dir, base_work_dir)
-                 VALUES (%s, %s, %s)"""
-        qdb.sql_connection.TRN.add(
-            sql, [qiita_config.test_environment, qiita_config.base_data_dir,
-                  qiita_config.working_dir])
-        qdb.sql_connection.TRN.execute()
+            # Insert the settings values to the database
+            sql = """INSERT INTO settings (test, base_data_dir, base_work_dir)
+                     VALUES (%s, %s, %s)"""
+            qdb.sql_connection.TRN.add(
+                sql, [test, qiita_config.base_data_dir,
+                      qiita_config.working_dir])
+            qdb.sql_connection.TRN.execute()
+            create_layout(test=test, verbose=verbose)
 
-        create_layout_and_patch(verbose=True)
+        patch(verbose=verbose, test=test)
 
         if load_ontologies:
             _add_ontology_data()
@@ -238,7 +255,7 @@ def make_environment(load_ontologies, download_reference, add_demo_user):
                 VALUES
                 ('demo@microbio.me', 4,
                 '$2a$12$gnUi8Qg.0tvW243v889BhOBhWLIHyIJjjgaG6dxuRJkUM8nXG9Efe',
-                'Demo', 'Qitta Dev', '1345 Colorado Avenue', '303-492-1984')"""
+                'Demo', 'Qiita Dev', '1345 Colorado Avenue', '303-492-1984')"""
             qdb.sql_connection.TRN.add(sql)
             sql = """INSERT INTO qiita.analysis (email, name, description,
                                                  dflt, analysis_status_id)
@@ -262,7 +279,6 @@ def make_environment(load_ontologies, download_reference, add_demo_user):
             print('Demo user successfully created')
 
         if qiita_config.test_environment:
-            _populate_test_db()
             print('Test environment successfully created')
         else:
             print('Production environment successfully created')
@@ -309,16 +325,15 @@ def drop_and_rebuild_tst_database():
     """Drops the qiita schema and rebuilds the test database
     """
     with qdb.sql_connection.TRN:
+        r_client.flushdb()
         # Drop the schema
         qdb.sql_connection.TRN.add("DROP SCHEMA IF EXISTS qiita CASCADE")
         # Set the database to unpatched
         qdb.sql_connection.TRN.add(
             "UPDATE settings SET current_patch = 'unpatched'")
         # Create the database and apply patches
-        create_layout_and_patch()
-        # Populate the database
-        with open(POPULATE_FP, 'U') as f:
-            qdb.sql_connection.TRN.add(f.read())
+        create_layout(test=True)
+        patch(test=True)
 
         qdb.sql_connection.TRN.execute()
 
@@ -361,7 +376,7 @@ def clean_test_environment():
     dummyfunc()
 
 
-def patch(patches_dir=PATCHES_DIR, verbose=False):
+def patch(patches_dir=PATCHES_DIR, verbose=False, test=False):
     """Patches the database schema based on the SETTINGS table
 
     Pulls the current patch from the settings table and applies all subsequent
@@ -387,6 +402,11 @@ def patch(patches_dir=PATCHES_DIR, verbose=False):
 
         for sql_patch_fp in sql_patch_files[next_patch_index:]:
             sql_patch_filename = basename(sql_patch_fp)
+
+            # patch 43.sql is when we started testing patches
+            if sql_patch_filename == '43.sql' and test:
+                _populate_test_db()
+
             py_patch_fp = corresponding_py_patch(
                 splitext(basename(sql_patch_fp))[0] + '.py')
             py_patch_filename = basename(py_patch_fp)
@@ -404,4 +424,4 @@ def patch(patches_dir=PATCHES_DIR, verbose=False):
                 if verbose:
                     print('\t\tApplying python patch %s...'
                           % py_patch_filename)
-                execfile(py_patch_fp)
+                execfile(py_patch_fp, {})

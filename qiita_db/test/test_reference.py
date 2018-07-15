@@ -38,21 +38,26 @@ class ReferenceTests(TestCase):
 
     def test_create(self):
         """Correctly creates the rows in the DB for the reference"""
-        fp_count = qdb.util.get_count('qiita.filepath')
         # Check that the returned object has the correct id
         obs = qdb.reference.Reference.create(
             self.name, self.version, self.seqs_fp, self.tax_fp, self.tree_fp)
         self.assertEqual(obs.id, 2)
 
-        seqs_id = fp_count + 1
-        tax_id = fp_count + 2
-        tree_id = fp_count + 3
-
         # Check that the information on the database is correct
         obs = self.conn_handler.execute_fetchall(
+<<<<<<< HEAD
             "SELECT * FROM qiita.reference WHERE reference_id=2")
         exp = [[2, self.name, self.version, seqs_id, tax_id, tree_id]]
         self.assertEqual(obs, exp)
+=======
+            "SELECT * FROM qiita.reference WHERE reference_id=3")
+        self.assertEqual(obs[0][1], self.name)
+        self.assertEqual(obs[0][2], self.version)
+
+        seqs_id = obs[0][3]
+        tax_id = obs[0][4]
+        tree_id = obs[0][5]
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
         # Check that the filepaths have been correctly added to the DB
         obs = self.conn_handler.execute_fetchall(
@@ -84,5 +89,13 @@ class ReferenceTests(TestCase):
         exp = join(self.db_dir, "GreenGenes_13_8_97_otus.tree")
         self.assertEqual(ref.tree_fp, exp)
 
+<<<<<<< HEAD
+=======
+    def test_tree_fp_empty(self):
+        ref = qdb.reference.Reference(2)
+        self.assertEqual(ref.tree_fp, '')
+
+
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 if __name__ == '__main__':
     main()

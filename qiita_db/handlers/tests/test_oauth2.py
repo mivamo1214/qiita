@@ -8,7 +8,7 @@
 from unittest import main
 from json import loads
 
-from moi import r_client
+from qiita_core.qiita_settings import r_client
 
 from qiita_pet.test.tornado_test_base import TestHandlerBase
 
@@ -34,7 +34,11 @@ class OAuth2BaseHandlerTests(TestHandlerBase):
         super(OAuth2BaseHandlerTests, self).setUp()
 
     def test_authenticate_header_client(self):
+<<<<<<< HEAD
         obs = self.get('/qiita_db/artifacts/100/mapping/', headers={
+=======
+        obs = self.get('/qiita_db/artifacts/1/', headers={
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
             'Authorization': 'Bearer ' + self.client_token})
         self.assertEqual(obs.code, 200)
         exp = {'success': False, 'error': 'Artifact does not exist',
@@ -42,7 +46,11 @@ class OAuth2BaseHandlerTests(TestHandlerBase):
         self.assertEqual(loads(obs.body), exp)
 
     def test_authenticate_header_username(self):
+<<<<<<< HEAD
         obs = self.get('/qiita_db/artifacts/100/mapping/', headers={
+=======
+        obs = self.get('/qiita_db/artifacts/1/', headers={
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
             'Authorization': 'Bearer ' + self.user_token})
         self.assertEqual(obs.code, 200)
         exp = {'success': False, 'error': 'Artifact does not exist',
@@ -51,7 +59,7 @@ class OAuth2BaseHandlerTests(TestHandlerBase):
         # Check rate limiting works
         self.assertEqual(int(r_client.get(self.user_rate_key)), 1)
         r_client.setex('testuser_test@foo.bar_daily_limit', 0, 2)
-        obs = self.get('/qiita_db/artifacts/100/mapping/', headers={
+        obs = self.get('/qiita_db/artifacts/100/', headers={
             'Authorization': 'Bearer ' + self.user_token})
         exp = {'error': 'invalid_grant',
                'error_description': 'Oauth2 error: daily request limit reached'
@@ -59,14 +67,14 @@ class OAuth2BaseHandlerTests(TestHandlerBase):
         self.assertEqual(loads(obs.body), exp)
 
     def test_authenticate_header_missing(self):
-        obs = self.get('/qiita_db/artifacts/100/mapping/')
+        obs = self.get('/qiita_db/artifacts/100/')
         self.assertEqual(obs.code, 400)
         self.assertEqual(loads(obs.body), {
             'error': 'invalid_request',
             'error_description': 'Oauth2 error: invalid access token'})
 
     def test_authenticate_header_bad_token(self):
-        obs = self.get('/qiita_db/artifacts/100/mapping/', headers={
+        obs = self.get('/qiita_db/artifacts/100/', headers={
             'Authorization': 'Bearer BADTOKEN'})
         self.assertEqual(obs.code, 400)
         exp = {'error': 'invalid_grant',
@@ -74,7 +82,7 @@ class OAuth2BaseHandlerTests(TestHandlerBase):
         self.assertEqual(loads(obs.body), exp)
 
     def test_authenticate_header_bad_header_type(self):
-        obs = self.get('/qiita_db/artifacts/100/mapping/', headers={
+        obs = self.get('/qiita_db/artifacts/100/', headers={
             'Authorization': 'WRONG ' + self.client_token})
         self.assertEqual(obs.code, 400)
         exp = {'error': 'invalid_grant',
@@ -298,6 +306,7 @@ class OAuth2HandlerTests(TestHandlerBase):
         exp = {'error': 'invalid_request',
                'error_description': 'Oauth2 error: missing user information'}
         self.assertEqual(obs_body, exp)
+
 
 if __name__ == "__main__":
     main()

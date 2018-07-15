@@ -5,13 +5,30 @@
 #
 # The full license is in the file LICENSE, distributed with this software.
 # -----------------------------------------------------------------------------
+
 from __future__ import division
 from functools import partial
+from contextlib import contextmanager
 
 from tornado.web import HTTPError
 
 from qiita_pet.util import linkify
+from qiita_pet.exceptions import QiitaHTTPError
 from qiita_core.util import execute_as_transaction
+
+
+@contextmanager
+def safe_execution():
+    try:
+        yield
+    except HTTPError:
+        # The HTTPError is already handled nicely by tornado, just re-raise
+        raise
+    except Exception as e:
+        # Any other error we need to catch and re-raise as a QiitaHTTPError
+        # so we can make sure that tornado will handle it gracefully and send
+        # a useful error message to the user
+        raise QiitaHTTPError(500, str(e))
 
 
 @execute_as_transaction
@@ -19,8 +36,8 @@ def check_access(user, study, no_public=False, raise_error=False):
     """make sure user has access to the study requested"""
     if not study.has_access(user, no_public):
         if raise_error:
-            raise HTTPError(403, "User %s does not have access to study %d" %
-                                 (user.id, study.id))
+            raise HTTPError(403, reason="User %s does not have access to "
+                            "study %d" % (user.id, study.id))
         else:
             return False
     return True
@@ -64,3 +81,61 @@ pubmed_linkifier = partial(
 
 doi_linkifier = partial(
     linkify, "<a target=\"_blank\" href=\"http://dx.doi.org/{0}\">{0}</a>")
+<<<<<<< HEAD
+=======
+
+
+def to_int(value):
+    """Transforms `value` to an integer
+
+    Parameters
+    ----------
+    value : str or int
+        The value to transform
+
+    Returns
+    -------
+    int
+        `value` as an integer
+
+    Raises
+    ------
+    HTTPError
+        If `value` cannot be transformed to an integer
+    """
+    try:
+        res = int(value)
+    except ValueError:
+        raise HTTPError(400, reason="%s cannot be converted to an "
+                        "integer" % value)
+    return res
+
+
+@execute_as_transaction
+def get_shared_links(obj):
+    """Creates email links for the users obj is shared with
+
+    Parameters
+    ----------
+    obj : QiitaObject
+        A qiita object with a 'shared_with' property that returns a list of
+        User objects
+
+    Returns
+    -------
+    str
+        Email links for each person obj is shared with
+    """
+    shared = []
+    for person in obj.shared_with:
+        name = person.info['name']
+        email = person.email
+        # Name is optional, so default to email if non existant
+        if name:
+            shared.append(study_person_linkifier(
+                (email, name)))
+        else:
+            shared.append(study_person_linkifier(
+                (email, email)))
+    return ", ".join(shared)
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed

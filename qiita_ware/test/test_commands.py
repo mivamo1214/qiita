@@ -7,18 +7,19 @@ from __future__ import division
 #
 # The full license is in the file LICENSE, distributed with this software.
 # -----------------------------------------------------------------------------
-from unittest import TestCase, main
+from unittest import TestCase, main, skipIf
 from os.path import join
-from warnings import simplefilter
 from tempfile import mkdtemp
 import pandas as pd
 from datetime import datetime
+from shutil import rmtree
 
 from h5py import File
+from qiita_files.demux import to_hdf5
 
 from qiita_ware.exceptions import ComputeError
-from qiita_ware.demux import to_hdf5
 from qiita_ware.commands import submit_EBI
+from qiita_db.util import get_mountpoint
 from qiita_db.study import Study, StudyPerson
 from qiita_db.software import DefaultParameters, Parameters
 from qiita_db.artifact import Artifact
@@ -26,6 +27,7 @@ from qiita_db.metadata_template.prep_template import PrepTemplate
 from qiita_db.metadata_template.sample_template import SampleTemplate
 from qiita_db.user import User
 from qiita_core.util import qiita_test_checker
+from qiita_core.qiita_settings import qiita_config
 
 
 @qiita_test_checker()
@@ -34,6 +36,7 @@ class CommandsTests(TestCase):
         self.files_to_remove = []
         self.temp_dir = mkdtemp()
         self.files_to_remove.append(self.temp_dir)
+        _, self.base_fp = get_mountpoint("preprocessed_data")[0]
 
     def write_demux_files(self, prep_template, generate_hdf5=True):
         """Writes a demux test file to avoid duplication of code"""
@@ -64,8 +67,6 @@ class CommandsTests(TestCase):
 
     def generate_new_study_with_preprocessed_data(self):
         """Creates a new study up to the processed data for testing"""
-        # ignoring warnings generated when adding templates
-        simplefilter("ignore")
         info = {
             "timeseries_type_id": 1,
             "metadata_complete": True,
@@ -79,7 +80,7 @@ class CommandsTests(TestCase):
             "principal_investigator_id": StudyPerson(3),
             "lab_person_id": StudyPerson(1)
         }
-        study = Study.create(User('test@foo.bar'), "Test EBI study", [1], info)
+        study = Study.create(User('test@foo.bar'), "Test EBI study", info)
         metadata_dict = {
             'Sample1': {'collection_timestamp': datetime(2015, 6, 1, 7, 0, 0),
                         'physical_specimen_location': 'location1',
@@ -97,7 +98,8 @@ class CommandsTests(TestCase):
                         'scientific_name': 'homo sapiens',
                         'Description': 'Test Sample 3'}
         }
-        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index')
+        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index',
+                                          dtype=str)
         SampleTemplate.create(metadata, study)
         metadata_dict = {
             'Sample1': {'primer': 'GTGCCAGCMGCCGCGGTAA',
@@ -122,7 +124,8 @@ class CommandsTests(TestCase):
                         'library_construction_protocol': 'Protocol ABC',
                         'experiment_design_description': "Random value 3"},
         }
-        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index')
+        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index',
+                                          dtype=str)
         pt = PrepTemplate.create(metadata, study, "16S", 'Metagenomics')
         fna_fp = join(self.temp_dir, 'seqs.fna')
         demux_fp = join(self.temp_dir, 'demux.seqs')
@@ -138,24 +141,39 @@ class CommandsTests(TestCase):
         return ppd
 
     def test_submit_EBI_step_2_failure(self):
-        # see issue #406
-        # ppd = self.write_demux_files(PrepTemplate(1), False)
-        #
-        # with self.assertRaises(AttributeError):
-        #     submit_EBI(ppd.id, 'ADD', True)
-        pass
+        ppd = self.write_demux_files(PrepTemplate(1), True)
+        pid = ppd.id
 
+        with self.assertRaises(ComputeError):
+            submit_EBI(pid, 'VALIDATE', True)
+
+        rmtree(join(self.base_fp, '%d_ebi_submission' % pid), True)
+
+    @skipIf(
+        qiita_config.ebi_seq_xfer_pass == '', 'skip: ascp not configured')
     def test_submit_EBI_parse_EBI_reply_failure(self):
         ppd = self.write_demux_files(PrepTemplate(1))
-        with self.assertRaises(ComputeError):
-            submit_EBI(ppd.id, 'ADD', True)
+        pid = ppd.id
 
+        with self.assertRaises(ComputeError) as error:
+            submit_EBI(pid, 'VALIDATE', True)
+        error = str(error.exception)
+        self.assertIn('EBI Submission failed! Log id:', error)
+        self.assertIn('The EBI submission failed:', error)
+
+        rmtree(join(self.base_fp, '%d_ebi_submission' % pid), True)
+
+    @skipIf(
+        qiita_config.ebi_seq_xfer_pass == '', 'skip: ascp not configured')
     def test_full_submission(self):
-        # see issue #406
-        # ppd = self.generate_new_study_with_preprocessed_data()
-        #
-        # submit_EBI(ppd.id, 'ADD', True)
-        pass
+        artifact = self.generate_new_study_with_preprocessed_data()
+        self.assertEqual(
+            artifact.study.ebi_submission_status, 'not submitted')
+        aid = artifact.id
+        submit_EBI(aid, 'VALIDATE', True, test=True)
+        self.assertEqual(artifact.study.ebi_submission_status, 'submitted')
+
+        rmtree(join(self.base_fp, '%d_ebi_submission' % aid), True)
 
 
 FASTA_EXAMPLE = """>1.SKB2.640194_1 X orig_bc=X new_bc=X bc_diffs=0

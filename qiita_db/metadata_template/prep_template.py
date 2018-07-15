@@ -13,6 +13,7 @@ from os.path import join
 from time import strftime
 from copy import deepcopy
 import warnings
+from skbio.util import find_duplicates
 
 import pandas as pd
 
@@ -21,6 +22,30 @@ import qiita_db as qdb
 from .constants import (PREP_TEMPLATE_COLUMNS, TARGET_GENE_DATA_TYPES,
                         PREP_TEMPLATE_COLUMNS_TARGET_GENE)
 from .base_metadata_template import BaseSample, MetadataTemplate
+
+
+def _check_duplicated_columns(prep_cols, sample_cols):
+    r"""Check for duplicated colums in the prep_cols and sample_cols
+
+    Parameters
+    ----------
+    prep_cols : list of str
+        Column names in the prep info file
+    sample_cols : list of str
+        Column names in the sample info file
+
+    Raises
+    ------
+    QiitaDBColumnError
+        If there are duplicated columns names in the sample and the prep
+    """
+    prep_cols.extend(sample_cols)
+    dups = find_duplicates(prep_cols)
+    if dups:
+        raise qdb.exceptions.QiitaDBColumnError(
+            'Duplicated column names in the sample and prep info '
+            'files: %s. You need to delete that duplicated field' %
+            ','.join(dups))
 
 
 class PrepSample(BaseSample):
@@ -33,7 +58,6 @@ class PrepSample(BaseSample):
     """
     _table = "prep_template_sample"
     _table_prefix = "prep_"
-    _column_table = "prep_columns"
     _id_column = "prep_template_id"
 
     def _check_template_class(self, md_template):
@@ -64,13 +88,13 @@ class PrepTemplate(MetadataTemplate):
     """
     _table = "prep_template_sample"
     _table_prefix = "prep_"
-    _column_table = "prep_columns"
     _id_column = "prep_template_id"
     _sample_cls = PrepSample
     _filepath_table = 'prep_template_filepath'
 
     @classmethod
-    def create(cls, md_template, study, data_type, investigation_type=None):
+    def create(cls, md_template, study, data_type, investigation_type=None,
+               name=None):
         r"""Creates the metadata template in the database
 
         Parameters
@@ -83,6 +107,8 @@ class PrepTemplate(MetadataTemplate):
             The data_type of the prep template
         investigation_type : str, optional
             The investigation type, if relevant
+        name : str, optional
+            The prep template name
 
         Returns
         -------
@@ -114,8 +140,9 @@ class PrepTemplate(MetadataTemplate):
                 pt_cols = deepcopy(PREP_TEMPLATE_COLUMNS)
                 pt_cols.update(PREP_TEMPLATE_COLUMNS_TARGET_GENE)
 
-            md_template = cls._clean_validate_template(md_template, study.id,
-                                                       pt_cols)
+            md_template = cls._clean_validate_template(md_template, study.id)
+            _check_duplicated_columns(list(md_template.columns),
+                                      study.sample_template.categories())
 
             # Insert the metadata template
             sql = """INSERT INTO qiita.prep_template
@@ -154,7 +181,12 @@ class PrepTemplate(MetadataTemplate):
             qdb.sql_connection.TRN.execute()
 
             pt = cls(prep_id)
+            pt.validate(pt_cols)
             pt.generate_files()
+
+            # Add the name to the prep information
+            pt.name = (name if name is not None
+                       else "Prep information %s" % pt.id)
 
             return pt
 
@@ -228,11 +260,6 @@ class PrepTemplate(MetadataTemplate):
             # Remove the rows from prep_template_samples
             sql = "DELETE FROM qiita.{0} WHERE {1} = %s".format(
                 cls._table, cls._id_column)
-            qdb.sql_connection.TRN.add(sql, args)
-
-            # Remove the rows from prep_columns
-            sql = "DELETE FROM qiita.{0} where {1} = %s".format(
-                cls._column_table, cls._id_column)
             qdb.sql_connection.TRN.add(sql, args)
 
             # Remove the row from study_prep_template
@@ -365,6 +392,10 @@ class PrepTemplate(MetadataTemplate):
                                        "template has already been processed. "
                                        "No new samples can be added to the "
                                        "prep template")
+
+        _check_duplicated_columns(list(new_columns), qdb.study.Study(
+            self.study_id).sample_template.categories())
+
         return True, ""
 
     @property
@@ -672,3 +703,49 @@ class PrepTemplate(MetadataTemplate):
             qdb.sql_connection.TRN.add(sql, [self.id])
             is_submitted = qdb.sql_connection.TRN.execute_fetchlast()
         return is_submitted
+
+    def delete_sample(self, sample_name):
+        """Delete `sample_name` from prep information file
+
+        Parameters
+        ----------
+        sample_name : str
+            The sample name to be deleted
+
+        Raises
+        ------
+        QiitaDBColumnError
+            If the prep info file has been processed
+        """
+        if self.artifact:
+            raise qdb.exceptions.QiitaDBOperationNotPermittedError(
+                "Prep info file '%d' has files attached, you cannot delete "
+                "samples." % (self._id))
+
+        self._common_delete_sample_steps(sample_name)
+
+    @property
+    def name(self):
+        """The name of the prep information
+
+        Returns
+        -------
+        str
+            The name of the prep information
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT name
+                     FROM qiita.prep_template
+                     WHERE prep_template_id = %s"""
+            qdb.sql_connection.TRN.add(sql, [self.id])
+            return qdb.sql_connection.TRN.execute_fetchlast()
+
+    @name.setter
+    def name(self, value):
+        """Changes the name of the prep template"""
+        with qdb.sql_connection.TRN:
+            sql = """UPDATE qiita.prep_template
+                     SET name = %s
+                     WHERE prep_template_id = %s"""
+            qdb.sql_connection.TRN.add(sql, [value, self.id])
+            qdb.sql_connection.TRN.execute()

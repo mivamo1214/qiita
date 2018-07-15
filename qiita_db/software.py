@@ -8,9 +8,21 @@
 
 from json import dumps, loads
 from copy import deepcopy
+from future import standard_library
+from multiprocessing import Process
 import inspect
+import warnings
 
+<<<<<<< HEAD
+=======
+import networkx as nx
+
+from qiita_core.qiita_settings import qiita_config
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 import qiita_db as qdb
+
+with standard_library.hooks():
+    from configparser import ConfigParser
 
 
 class Command(qdb.base.QiitaObject):
@@ -34,6 +46,118 @@ class Command(qdb.base.QiitaObject):
     """
     _table = "software_command"
 
+<<<<<<< HEAD
+=======
+    @classmethod
+    def get_commands_by_input_type(cls, artifact_types, active_only=True,
+                                   exclude_analysis=True):
+        """Returns the commands that can process the given artifact types
+
+        Parameters
+        ----------
+        artifact_type : list of str
+            The artifact types
+        active_only : bool, optional
+            If True, return only active commands, otherwise return all commands
+            Default: True
+        exclude_analysis : bool, optional
+            If True, return commands that are not part of the analysis pipeline
+
+        Returns
+        -------
+        generator of qiita_db.software.Command
+            The commands that can process the given artifact tyoes
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT DISTINCT command_id
+                     FROM qiita.command_parameter
+                        JOIN qiita.parameter_artifact_type
+                            USING (command_parameter_id)
+                        JOIN qiita.artifact_type USING (artifact_type_id)
+                        JOIN qiita.software_command USING (command_id)
+                     WHERE artifact_type IN %s"""
+            if active_only:
+                sql += " AND active = True"
+            if exclude_analysis:
+                sql += " AND is_analysis = False"
+            qdb.sql_connection.TRN.add(sql, [tuple(artifact_types)])
+            for c_id in qdb.sql_connection.TRN.execute_fetchflatten():
+                yield cls(c_id)
+
+    @classmethod
+    def get_html_generator(cls, artifact_type):
+        """Returns the command that generete the HTML for the given artifact
+
+        Parameters
+        ----------
+        artifact_type : str
+            The artifact type to search the HTML generator for
+
+        Returns
+        -------
+        qiita_db.software.Command
+            The newly created command
+
+        Raises
+        ------
+        qdb.exceptions.QiitaDBError when the generete the HTML command can't
+        be found
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT command_id
+                     FROM qiita.software_command
+                        JOIN qiita.software_artifact_type USING (software_id)
+                        JOIN qiita.artifact_type USING (artifact_type_id)
+                     WHERE artifact_type = %s
+                        AND name = 'Generate HTML summary'
+                        AND active = true"""
+            qdb.sql_connection.TRN.add(sql, [artifact_type])
+            try:
+                res = qdb.sql_connection.TRN.execute_fetchlast()
+            except IndexError:
+                raise qdb.exceptions.QiitaDBError(
+                    "There is no command to generate the HTML summary for "
+                    "artifact type '%s'" % artifact_type)
+
+            return cls(res)
+
+    @classmethod
+    def get_validator(cls, artifact_type):
+        """Returns the command that validates the given artifact
+
+        Parameters
+        ----------
+        artifact_type : str
+            The artifact type to search the Validate for
+
+        Returns
+        -------
+        qiita_db.software.Command
+            The newly created command
+
+        Raises
+        ------
+        qdb.exceptions.QiitaDBError when the Validate command can't be found
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT command_id
+                     FROM qiita.software_command
+                        JOIN qiita.software_artifact_type USING (software_id)
+                        JOIN qiita.artifact_type USING (artifact_type_id)
+                     WHERE artifact_type = %s
+                        AND name = 'Validate'
+                        AND active = true"""
+            qdb.sql_connection.TRN.add(sql, [artifact_type])
+            try:
+                res = qdb.sql_connection.TRN.execute_fetchlast()
+            except IndexError:
+                raise qdb.exceptions.QiitaDBError(
+                    "There is no command to generate the Validate for "
+                    "artifact type '%s'" % artifact_type)
+
+            return cls(res)
+
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
     def _check_id(self, id_):
         """Check that the provided ID actually exists in the database
 
@@ -80,7 +204,8 @@ class Command(qdb.base.QiitaObject):
             return qdb.sql_connection.TRN.execute_fetchlast()
 
     @classmethod
-    def create(cls, software, name, description, parameters):
+    def create(cls, software, name, description, parameters, outputs=None,
+               analysis_only=False):
         r"""Creates a new command in the system
 
         The supported types for the parameters are:
@@ -105,9 +230,21 @@ class Command(qdb.base.QiitaObject):
             The description of the command
         parameters : dict
             The description of the parameters that this command received. The
-            format is: {parameter_name: (parameter_type, default)},
-            where parameter_name, parameter_type and default are strings. If
-            default is None.
+            format is: {parameter_name: (parameter_type, default, name_order,
+            check_biom_merge)},
+            where parameter_name, parameter_type and default are strings,
+            name_order is an optional integer value and check_biom_merge is
+            an optional boolean value. name_order is used to specify the order
+            of the parameter when automatically naming the artifacts.
+            check_biom_merge is used when merging artifacts in the analysis
+            pipeline.
+        outputs : dict, optional
+            The description of the outputs that this command generated. The
+            format is either {output_name: artifact_type} or
+            {output_name: (artifact_type, check_biom_merge)}
+        analysis_only : bool, optional
+            If true, then the command will only be available on the analysis
+            pipeline. Default: False.
 
         Returns
         -------
@@ -138,36 +275,59 @@ class Command(qdb.base.QiitaObject):
                 "Error creating command %s. At least one parameter should "
                 "be provided." % name)
         sql_param_values = []
+        sql_artifact_params = []
         for pname, vals in parameters.items():
-            if len(vals) != 2:
+            lenvals = len(vals)
+            if lenvals == 2:
+                ptype, dflt = vals
+                name_order = None
+                check_biom_merge = False
+            elif lenvals == 4:
+                ptype, dflt, name_order, check_biom_merge = vals
+            else:
                 raise qdb.exceptions.QiitaDBError(
                     "Malformed parameters dictionary, the format should be "
-                    "{param_name: [parameter_type, default]}. Found: "
-                    "%s for parameter name %s" % (vals, pname))
+                    "either {param_name: [parameter_type, default]} or "
+                    "{parameter_name: (parameter_type, default, name_order, "
+                    "check_biom_merge)}. Found: %s for parameter name %s"
+                    % (vals, pname))
 
-            ptype, dflt = vals
             # Check that the type is one of the supported types
-            supported_types = ['string', 'integer', 'float', 'artifact',
-                               'reference']
-            if ptype not in supported_types and not ptype.startswith('choice'):
-                supported_types.append('choice')
+            supported_types = ['string', 'integer', 'float', 'reference',
+                               'boolean', 'prep_template', 'analysis']
+            if ptype not in supported_types and not ptype.startswith(
+                    ('choice', 'mchoice', 'artifact')):
+                supported_types.extend(['choice', 'mchoice', 'artifact'])
                 raise qdb.exceptions.QiitaDBError(
                     "Unsupported parameters type '%s' for parameter %s. "
                     "Supported types are: %s"
                     % (ptype, pname, ', '.join(supported_types)))
 
-            if ptype.startswith('choice') and dflt is not None:
-                choices = loads(ptype.split(':')[1])
-                if dflt not in choices:
+            if ptype.startswith(('choice', 'mchoice')) and dflt is not None:
+                choices = set(loads(ptype.split(':')[1]))
+                dflt_val = dflt
+                if ptype.startswith('choice'):
+                    # In the choice case, the dflt value is a single string,
+                    # create a list with it the string on it to use the
+                    # issuperset call below
+                    dflt_val = [dflt_val]
+                else:
+                    # jsonize the list to store it in the DB
+                    dflt = dumps(dflt)
+                if not choices.issuperset(dflt_val):
                     raise qdb.exceptions.QiitaDBError(
                         "The default value '%s' for the parameter %s is not "
                         "listed in the available choices: %s"
                         % (dflt, pname, ', '.join(choices)))
 
-            if dflt is not None:
-                sql_param_values.append([pname, ptype, False, dflt])
+            if ptype.startswith('artifact'):
+                atypes = loads(ptype.split(':')[1])
+                sql_artifact_params.append(
+                    [pname, 'artifact', atypes])
             else:
-                sql_param_values.append([pname, ptype, True, None])
+                sql_param_values.append(
+                    [pname, ptype, dflt is None, dflt, name_order,
+                     check_biom_merge])
 
         with qdb.sql_connection.TRN:
             if cls.exists(software, name):
@@ -176,22 +336,86 @@ class Command(qdb.base.QiitaObject):
                                % (software.id, name))
             # Add the command to the DB
             sql = """INSERT INTO qiita.software_command
-                            (name, software_id, description)
-                     VALUES (%s, %s, %s)
+                            (name, software_id, description, is_analysis)
+                     VALUES (%s, %s, %s, %s)
                      RETURNING command_id"""
-            sql_params = [name, software.id, description]
+            sql_params = [name, software.id, description, analysis_only]
             qdb.sql_connection.TRN.add(sql, sql_params)
             c_id = qdb.sql_connection.TRN.execute_fetchlast()
 
             # Add the parameters to the DB
             sql = """INSERT INTO qiita.command_parameter
-                        (command_id, parameter_name, parameter_type, required,
-                         default_value)
-                     VALUES (%s, %s, %s, %s, %s)"""
-            sql_params = [[c_id, pname, p_type, reqd, default]
-                          for pname, p_type, reqd, default in sql_param_values]
+                        (command_id, parameter_name, parameter_type,
+                         required, default_value, name_order, check_biom_merge)
+                     VALUES (%s, %s, %s, %s, %s, %s, %s)
+                     RETURNING command_parameter_id"""
+            sql_params = [
+                [c_id, pname, p_type, reqd, default, no, chm]
+                for pname, p_type, reqd, default, no, chm in sql_param_values]
             qdb.sql_connection.TRN.add(sql, sql_params, many=True)
             qdb.sql_connection.TRN.execute()
+
+            # Add the artifact parameters
+            sql_type = """INSERT INTO qiita.parameter_artifact_type
+                            (command_parameter_id, artifact_type_id)
+                          VALUES (%s, %s)"""
+            supported_types = []
+            for pname, p_type, atypes in sql_artifact_params:
+                sql_params = [c_id, pname, p_type, True, None, None, False]
+                qdb.sql_connection.TRN.add(sql, sql_params)
+                pid = qdb.sql_connection.TRN.execute_fetchlast()
+                sql_params = [
+                    [pid, qdb.util.convert_to_id(at, 'artifact_type')]
+                    for at in atypes]
+                qdb.sql_connection.TRN.add(sql_type, sql_params, many=True)
+                supported_types.extend([atid for _, atid in sql_params])
+
+            # If the software type is 'artifact definition', there are a couple
+            # of extra steps
+            if software.type == 'artifact definition':
+                # If supported types is not empty, link the software with these
+                # types
+                if supported_types:
+                    sql = """INSERT INTO qiita.software_artifact_type
+                                    (software_id, artifact_type_id)
+                                VALUES (%s, %s)"""
+                    sql_params = [[software.id, atid]
+                                  for atid in supported_types]
+                    qdb.sql_connection.TRN.add(sql, sql_params, many=True)
+                # If this is the validate command, we need to add the
+                # provenance and name parameters. These are used internally,
+                # that's why we are adding them here
+                if name == 'Validate':
+                    sql = """INSERT INTO qiita.command_parameter
+                                (command_id, parameter_name, parameter_type,
+                                 required, default_value)
+                             VALUES (%s, 'name', 'string', 'False',
+                                     'dflt_name'),
+                                    (%s, 'provenance', 'string', 'False', NULL)
+                             """
+                    qdb.sql_connection.TRN.add(sql, [c_id, c_id])
+
+            # Add the outputs to the command
+            if outputs:
+                sql_args = []
+                for pname, at in outputs.items():
+                    if isinstance(at, tuple):
+                        sql_args.append(
+                            [pname, c_id,
+                             qdb.util.convert_to_id(at[0], 'artifact_type'),
+                             at[1]])
+                    else:
+                        sql_args.append(
+                            [pname, c_id,
+                             qdb.util.convert_to_id(at, 'artifact_type'),
+                             False])
+
+                sql = """INSERT INTO qiita.command_output
+                            (name, command_id, artifact_type_id,
+                             check_biom_merge)
+                         VALUES (%s, %s, %s, %s)"""
+                qdb.sql_connection.TRN.add(sql, sql_args, many=True)
+                qdb.sql_connection.TRN.execute()
 
         return cls(c_id)
 
@@ -292,7 +516,17 @@ class Command(qdb.base.QiitaObject):
                      WHERE command_id = %s AND required = false"""
             qdb.sql_connection.TRN.add(sql, [self.id])
             res = qdb.sql_connection.TRN.execute_fetchindex()
-            return {pname: [ptype, dflt] for pname, ptype, dflt in res}
+
+            # Define a function to load the json storing the default parameters
+            # if ptype is multiple choice. When I added it to the for loop as
+            # a one liner if, made the code a bit hard to read
+            def dflt_fmt(dflt, ptype):
+                if ptype.startswith('mchoice'):
+                    return loads(dflt)
+                return dflt
+
+            return {pname: [ptype, dflt_fmt(dflt, ptype)]
+                    for pname, ptype, dflt in res}
 
     @property
     def default_parameter_sets(self):
@@ -313,6 +547,117 @@ class Command(qdb.base.QiitaObject):
             for pid in res:
                 yield DefaultParameters(pid)
 
+<<<<<<< HEAD
+=======
+    @property
+    def outputs(self):
+        """Returns the list of output artifact types
+
+        Returns
+        -------
+        list of str
+            The output artifact types
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT name, artifact_type
+                     FROM qiita.command_output
+                        JOIN qiita.artifact_type USING (artifact_type_id)
+                     WHERE command_id = %s"""
+            qdb.sql_connection.TRN.add(sql, [self.id])
+            return qdb.sql_connection.TRN.execute_fetchindex()
+
+    @property
+    def active(self):
+        """Returns if the command is active or not
+
+        Returns
+        -------
+        bool
+            Whether the command is active or not
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT active
+                     FROM qiita.software_command
+                     WHERE command_id = %s"""
+            qdb.sql_connection.TRN.add(sql, [self.id])
+            return qdb.sql_connection.TRN.execute_fetchlast()
+
+    def activate(self):
+        """Activates the command"""
+        with qdb.sql_connection.TRN:
+            sql = """UPDATE qiita.software_command
+                     SET active = %s
+                     WHERE command_id = %s"""
+            qdb.sql_connection.TRN.add(sql, [True, self.id])
+            return qdb.sql_connection.TRN.execute()
+
+    @property
+    def analysis_only(self):
+        """Returns if the command is an analysis-only command
+
+        Returns
+        -------
+        bool
+            Whether the command is analysis only or not
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT is_analysis
+                     FROM qiita.software_command
+                     WHERE command_id = %s"""
+            qdb.sql_connection.TRN.add(sql, [self.id])
+            return qdb.sql_connection.TRN.execute_fetchlast()
+
+    @property
+    def naming_order(self):
+        """The ordered list of parameters to use to name the output artifacts
+
+        Returns
+        -------
+        list of str
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT parameter_name
+                     FROM qiita.command_parameter
+                     WHERE command_id = %s AND name_order IS NOT NULL
+                     ORDER BY name_order"""
+            qdb.sql_connection.TRN.add(sql, [self.id])
+            return qdb.sql_connection.TRN.execute_fetchflatten()
+
+    @property
+    def merging_scheme(self):
+        """The values to check when merging the output result
+
+        Returns
+        -------
+        dict of {'parameters': [list of str],
+                 'outputs': [list of str]
+                 'ignore_parent_command': bool}
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT parameter_name
+                     FROM qiita.command_parameter
+                     WHERE command_id = %s AND check_biom_merge = TRUE
+                     ORDER BY parameter_name"""
+            qdb.sql_connection.TRN.add(sql, [self.id])
+            params = qdb.sql_connection.TRN.execute_fetchflatten()
+            sql = """SELECT name
+                     FROM qiita.command_output
+                     WHERE command_id = %s AND check_biom_merge = TRUE
+                     ORDER BY name"""
+            qdb.sql_connection.TRN.add(sql, [self.id])
+            outputs = qdb.sql_connection.TRN.execute_fetchflatten()
+
+            sql = """SELECT ignore_parent_command
+                     FROM qiita.software_command
+                     WHERE command_id = %s"""
+            qdb.sql_connection.TRN.add(sql, [self.id])
+            ipc = qdb.sql_connection.TRN.execute_fetchlast()
+
+            return {'parameters': params,
+                    'outputs': outputs,
+                    'ignore_parent_command': ipc}
+
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
 class Software(qdb.base.QiitaObject):
     r"""A software package available in the system
@@ -339,8 +684,173 @@ class Software(qdb.base.QiitaObject):
     _table = "software"
 
     @classmethod
+    def iter_active(cls):
+        """Iterates over all active software"""
+        with qdb.sql_connection.TRN:
+            sql = """SELECT software_id
+                     FROM qiita.software
+                     WHERE active = True
+                     ORDER BY software_id"""
+            qdb.sql_connection.TRN.add(sql)
+            for s_id in qdb.sql_connection.TRN.execute_fetchflatten():
+                yield cls(s_id)
+
+    @classmethod
+    def deactivate_all(cls):
+        """Deactivates all the plugins in the system"""
+        with qdb.sql_connection.TRN:
+            sql = "UPDATE qiita.software SET active = False"
+            qdb.sql_connection.TRN.add(sql)
+            sql = "UPDATE qiita.software_command SET active = False"
+            qdb.sql_connection.TRN.add(sql)
+            qdb.sql_connection.TRN.execute()
+
+    @classmethod
+    def from_file(cls, fp, update=False):
+        """Installs/updates a plugin from a plugin configuration file
+
+        Parameters
+        ----------
+        fp : str
+            Path to the plugin configuration file
+        update : bool, optional
+            If true, update the values in the database with the current values
+            in the config file. Otherwise, use stored values and warn if config
+            file contents and database contents do not match
+
+        Returns
+        -------
+        qiita_db.software.Software
+            The software object for the contents of `fp`
+
+        Raises
+        ------
+        qiita_db.exceptions.QiitaDBOperationNotPermittedError
+            If the plugin type in the DB and in the config file doesn't match
+            If the (client_id, client_secret) pair in the DB and in the config
+            file doesn't match
+        """
+        config = ConfigParser()
+        with open(fp, 'U') as conf_file:
+            config.readfp(conf_file)
+
+        name = config.get('main', 'NAME')
+        version = config.get('main', 'VERSION')
+        description = config.get('main', 'DESCRIPTION')
+        env_script = config.get('main', 'ENVIRONMENT_SCRIPT')
+        start_script = config.get('main', 'START_SCRIPT')
+        software_type = config.get('main', 'PLUGIN_TYPE')
+        publications = config.get('main', 'PUBLICATIONS')
+        publications = loads(publications) if publications else []
+        client_id = config.get('oauth2', 'CLIENT_ID')
+        client_secret = config.get('oauth2', 'CLIENT_SECRET')
+
+        if cls.exists(name, version):
+            # This plugin already exists, check that all the values are the
+            # same and return the existing plugin
+            with qdb.sql_connection.TRN:
+                sql = """SELECT software_id
+                         FROM qiita.software
+                         WHERE name = %s AND version = %s"""
+                qdb.sql_connection.TRN.add(sql, [name, version])
+                instance = cls(qdb.sql_connection.TRN.execute_fetchlast())
+
+                warning_values = []
+                sql_update = """UPDATE qiita.software
+                                SET {0} = %s
+                                WHERE software_id = %s"""
+
+                values = [description, env_script, start_script]
+                attrs = ['description', 'environment_script', 'start_script']
+                for value, attr in zip(values, attrs):
+                    if value != instance.__getattribute__(attr):
+                        if update:
+                            qdb.sql_connection.TRN.add(
+                                sql_update.format(attr), [value, instance.id])
+                        else:
+                            warning_values.append(attr)
+
+                # Having a different plugin type should be an error,
+                # independently if the user is trying to update plugins or not
+                if software_type != instance.type:
+                    raise qdb.exceptions.QiitaDBOperationNotPermittedError(
+                        'The plugin type of the plugin "%s" version %s does '
+                        'not match the one in the system' % (name, version))
+
+                if publications != instance.publications:
+                    if update:
+                        instance.add_publications(publications)
+                    else:
+                        warning_values.append('publications')
+
+                if (client_id != instance.client_id or
+                        client_secret != instance.client_secret):
+                    if update:
+                        sql = """INSERT INTO qiita.oauth_identifiers
+                                    (client_id, client_secret)
+                                 SELECT %s, %s
+                                 WHERE NOT EXISTS(SELECT *
+                                                  FROM qiita.oauth_identifiers
+                                                  WHERE client_id = %s
+                                                    AND client_secret = %s)"""
+                        qdb.sql_connection.TRN.add(
+                            sql, [client_id, client_secret,
+                                  client_id, client_secret])
+                        sql = """UPDATE qiita.oauth_software
+                                    SET client_id = %s
+                                    WHERE software_id = %s"""
+                        qdb.sql_connection.TRN.add(
+                            sql, [client_id, instance.id])
+                    else:
+                        raise qdb.exceptions.QiitaDBOperationNotPermittedError(
+                            'The (client_id, client_secret) pair of the '
+                            'plugin "%s" version "%s" does not match the one '
+                            'in the system' % (name, version))
+
+                if warning_values:
+                    warnings.warn(
+                        'Plugin "%s" version "%s" config file does not match '
+                        'with stored information. Check the config file or '
+                        'run "qiita plugin update" to update the plugin '
+                        'information. Offending values: %s'
+                        % (name, version, ", ".join(sorted(warning_values))),
+                        qdb.exceptions.QiitaDBWarning)
+                qdb.sql_connection.TRN.execute()
+        else:
+            # This is a new plugin, create it
+            instance = cls.create(
+                name, version, description, env_script, start_script,
+                software_type, publications=publications, client_id=client_id,
+                client_secret=client_secret)
+
+        return instance
+
+    @classmethod
+    def exists(cls, name, version):
+        """Returns whether the plugin (name, version) already exists
+
+        Parameters
+        ----------
+        name : str
+            The name of the plugin
+        version : str
+            The version of the plugin
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT EXISTS(
+                        SELECT * FROM qiita.software
+                        WHERE name = %s AND version = %s)"""
+            qdb.sql_connection.TRN.add(sql, [name, version])
+            return qdb.sql_connection.TRN.execute_fetchlast()
+
+    @classmethod
     def create(cls, name, version, description, environment_script,
+<<<<<<< HEAD
                start_script, publications=None):
+=======
+               start_script, software_type, publications=None,
+               client_id=None, client_secret=None):
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
         r"""Creates a new software in the system
 
         Parameters
@@ -358,6 +868,15 @@ class Software(qdb.base.QiitaObject):
         publications : list of (str, str), optional
             A list with the (DOI, pubmed_id) of the publications attached to
             the software
+        client_id : str, optional
+            The client_id of the software. Default: randomly generated
+        client_secret : str, optional
+            The client_secret of the software. Default: randomly generated
+
+        Raises
+        ------
+        qiita_db.exceptions.QiitaDBError
+            If one of client_id or client_secret is provided but not both
         """
         with qdb.sql_connection.TRN:
             sql = """INSERT INTO qiita.software
@@ -375,7 +894,67 @@ class Software(qdb.base.QiitaObject):
             if publications:
                 instance.add_publications(publications)
 
+            id_is_none = client_id is None
+            secret_is_none = client_secret is None
+
+            if id_is_none and secret_is_none:
+                # Both are none, generate new ones
+                client_id = qdb.util.create_rand_string(50, punct=False)
+                client_secret = qdb.util.create_rand_string(255, punct=False)
+            elif id_is_none ^ secret_is_none:
+                # One has been provided but not the other, raise an error
+                raise qdb.exceptions.QiitaDBError(
+                    'Plugin "%s" version "%s" cannot be created, please '
+                    'provide both client_id and client_secret or none of them'
+                    % (name, version))
+
+            # At this point both client_id and client_secret are defined
+            sql = """INSERT INTO qiita.oauth_identifiers
+                        (client_id, client_secret)
+                     SELECT %s, %s
+                     WHERE NOT EXISTS(SELECT *
+                                      FROM qiita.oauth_identifiers
+                                      WHERE client_id = %s
+                                        AND client_secret = %s)"""
+            qdb.sql_connection.TRN.add(
+                sql, [client_id, client_secret, client_id, client_secret])
+            sql = """INSERT INTO qiita.oauth_software (software_id, client_id)
+                     VALUES (%s, %s)"""
+            qdb.sql_connection.TRN.add(sql, [s_id, client_id])
+
         return instance
+
+    @classmethod
+    def from_name_and_version(cls, name, version):
+        """Returns the software object with the given name and version
+
+        Parameters
+        ----------
+        name: str
+            The software name
+        version : str
+            The software version
+
+        Returns
+        -------
+        qiita_db.software.Software
+            The software with the given name and version
+
+        Raises
+        ------
+        qiita_db.exceptions.QiitaDBUnknownIDError
+            If no software with the given name and version exists
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT software_id
+                     FROM qiita.software
+                     WHERE name = %s AND version = %s"""
+            qdb.sql_connection.TRN.add(sql, [name, version])
+            res = qdb.sql_connection.TRN.execute_fetchindex()
+            if not res:
+                raise qdb.exceptions.QiitaDBUnknownIDError(
+                    "%s %s" % (name, version), cls._table)
+            return cls(res[0][0])
 
     @property
     def name(self):
@@ -438,6 +1017,30 @@ class Software(qdb.base.QiitaObject):
             return [Command(cid)
                     for cid in qdb.sql_connection.TRN.execute_fetchflatten()]
 
+    def get_command(self, cmd_name):
+        """Returns the command with the given name in the software
+
+        Parameters
+        ----------
+        cmd_name: str
+            The command with the given name
+
+        Returns
+        -------
+        qiita_db.software.Command
+            The command with the given name in this software
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT command_id
+                     FROM qiita.software_command
+                     WHERE software_id =%s AND name=%s"""
+            qdb.sql_connection.TRN.add(sql, [self.id, cmd_name])
+            res = qdb.sql_connection.TRN.execute_fetchindex()
+            if not res:
+                raise qdb.exceptions.QiitaDBUnknownIDError(
+                    cmd_name, "software_command")
+            return Command(res[0][0])
+
     @property
     def publications(self):
         """The publications attached to the software
@@ -472,13 +1075,22 @@ class Software(qdb.base.QiitaObject):
         """
         with qdb.sql_connection.TRN:
             sql = """INSERT INTO qiita.publication (doi, pubmed_id)
-                        VALUES (%s, %s)"""
-            qdb.sql_connection.TRN.add(sql, publications, many=True)
+                        SELECT %s, %s
+                        WHERE NOT EXISTS(SELECT *
+                                         FROM qiita.publication
+                                         WHERE doi = %s)"""
+            args = [[doi, pid, doi] for doi, pid in publications]
+            qdb.sql_connection.TRN.add(sql, args, many=True)
 
             sql = """INSERT INTO qiita.software_publication
                             (software_id, publication_doi)
-                        VALUES (%s, %s)"""
-            sql_params = [[self.id, doi] for doi, _ in publications]
+                        SELECT %s, %s
+                        WHERE NOT EXISTS(SELECT *
+                                         FROM qiita.software_publication
+                                         WHERE software_id = %s AND
+                                               publication_doi = %s)"""
+            sql_params = [[self.id, doi, self.id, doi]
+                          for doi, _ in publications]
             qdb.sql_connection.TRN.add(sql, sql_params, many=True)
             qdb.sql_connection.TRN.execute()
 
@@ -514,6 +1126,109 @@ class Software(qdb.base.QiitaObject):
             qdb.sql_connection.TRN.add(sql, [self.id])
             return qdb.sql_connection.TRN.execute_fetchlast()
 
+<<<<<<< HEAD
+=======
+    @property
+    def default_workflows(self):
+        """Returns the default workflows attached to the current software
+
+        Returns
+        -------
+        generator of qiita_db.software.DefaultWorkflow
+            The defaultworkflows attached to the software
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT default_workflow_id
+                     FROM qiita.default_workflow
+                     WHERE software_id = %s
+                     ORDER BY default_workflow_id"""
+            qdb.sql_connection.TRN.add(sql, [self.id])
+            for wf_id in qdb.sql_connection.TRN.execute_fetchflatten():
+                yield DefaultWorkflow(wf_id)
+
+    @property
+    def type(self):
+        """Returns the type of the software
+
+        Returns
+        -------
+        str
+            The type of the software
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT software_type
+                     FROM qiita.software_type
+                        JOIN qiita.software USING (software_type_id)
+                     WHERE software_id = %s"""
+            qdb.sql_connection.TRN.add(sql, [self.id])
+            return qdb.sql_connection.TRN.execute_fetchlast()
+
+    @property
+    def active(self):
+        """Returns if the software is active or not
+
+        Returns
+        -------
+        bool
+            Whether the software is active or not
+        """
+        with qdb.sql_connection.TRN:
+            sql = "SELECT active FROM qiita.software WHERE software_id = %s"
+            qdb.sql_connection.TRN.add(sql, [self.id])
+            return qdb.sql_connection.TRN.execute_fetchlast()
+
+    def activate(self):
+        """Activates the plugin"""
+        with qdb.sql_connection.TRN:
+            sql = """UPDATE qiita.software
+                     SET active = %s
+                     WHERE software_id = %s"""
+            qdb.sql_connection.TRN.add(sql, [True, self.id])
+            return qdb.sql_connection.TRN.execute()
+
+    @property
+    def client_id(self):
+        """Returns the client id of the plugin
+
+        Returns
+        -------
+        str
+            The client id of the software
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT client_id
+                     FROM qiita.oauth_software
+                     WHERE software_id = %s"""
+            qdb.sql_connection.TRN.add(sql, [self.id])
+            return qdb.sql_connection.TRN.execute_fetchlast()
+
+    @property
+    def client_secret(self):
+        """Returns the client secret of the plugin
+
+        Returns
+        -------
+        str
+            The client secrect of the plugin
+        """
+        with qdb.sql_connection.TRN:
+            sql = """SELECT client_secret
+                     FROM qiita.oauth_software
+                        JOIN qiita.oauth_identifiers USING (client_id)
+                     WHERE software_id = %s"""
+            qdb.sql_connection.TRN.add(sql, [self.id])
+            return qdb.sql_connection.TRN.execute_fetchlast()
+
+    def register_commands(self):
+        """Registers the software commands"""
+        url = "%s%s" % (qiita_config.base_url, qiita_config.portal_dir)
+        cmd = '%s "%s" "%s" "%s" "register" "ignored"' % (
+            qiita_config.plugin_launcher, self.environment_script,
+            self.start_script, url)
+        p = Process(target=qdb.processing_job._system_call, args=(cmd,))
+        p.start()
+
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
 class DefaultParameters(qdb.base.QiitaObject):
     """Models a default set of parameters of a command

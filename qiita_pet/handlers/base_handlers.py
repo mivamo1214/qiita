@@ -1,4 +1,13 @@
+# -----------------------------------------------------------------------------
+# Copyright (c) 2014--, The Qiita Development Team.
+#
+# Distributed under the terms of the BSD 3-clause License.
+#
+# The full license is in the file LICENSE, distributed with this software.
+# -----------------------------------------------------------------------------
+
 from tornado.web import RequestHandler
+
 from qiita_db.logger import LogEntry
 from qiita_db.user import User
 from qiita_pet.util import convert_text_html
@@ -32,7 +41,7 @@ class BaseHandler(RequestHandler):
         if user:
             try:
                 is_admin = user.level == 'admin'
-            except:
+            except Exception:
                 # Any issue with this check leaves default as not admin
                 pass
 
@@ -68,6 +77,16 @@ class MainHandler(BaseHandler):
         msg = convert_text_html(msg)
         lvl = self.get_argument('level', '')
         self.render("index.html", message=msg, level=lvl)
+
+
+class IFrame(BaseHandler):
+    '''Open one of the IFrame pages'''
+    def get(self):
+        msg = self.get_argument('message', '')
+        msg = convert_text_html(msg)
+        lvl = self.get_argument('level', '')
+        iframe = self.get_argument('iframe', '')
+        self.render("iframe.html", iframe=iframe, message=msg, level=lvl)
 
 
 class MockupHandler(BaseHandler):

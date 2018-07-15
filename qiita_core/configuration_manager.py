@@ -7,14 +7,14 @@
 # -----------------------------------------------------------------------------
 
 from functools import partial
-from os.path import join, dirname, abspath, isdir
-from os import environ
+from os.path import join, dirname, abspath, isdir, expanduser, exists
+from os import environ, mkdir
 from future import standard_library
 
 from .exceptions import MissingConfigSection
 
 with standard_library.hooks():
-    from configparser import ConfigParser
+    from configparser import ConfigParser, Error, NoOptionError
 
 
 class ConfigurationManager(object):
@@ -32,7 +32,9 @@ class ConfigurationManager(object):
     base_url: str
         base URL for the website, in the form http://SOMETHING.com
     base_data_dir : str
-        Path to the base directorys where all data file are stored
+        Path to the base directory where all data files are stored.
+    log_dir : str
+        Path to the directory where the log files are saved.
     working_dir : str
         Path to the working directory
     max_upload_size : int
@@ -53,18 +55,6 @@ class ConfigurationManager(object):
         The host where the database lives
     port : int
         The port used to connect to the postgres database in the previous host
-    ipyc_demo : str
-        The IPython demo cluster profile
-    ipyc_demo_n : int
-        The size of the demo cluster
-    ipyc_reserved : str
-        The IPython reserved cluster profile
-    ipyc_reserved_n : int
-        The size of the reserved cluster
-    ipyc_general : str
-        The IPython general cluster profile
-    ipyc_general_n : int
-        The size of the general cluster
     smtp_host : str
         The SMTP host from which mail will be sent
     smtp_port : int
@@ -107,8 +97,19 @@ class ConfigurationManager(object):
         The filepath for the configuration file that is loaded
     portal_fp : str
         The filepath to the portal styling config file
+    qiita_env : str
+        The script used to start the qiita environment
+    private_launcher : str
+        The script used to start private jobs
     plugin_launcher : str
         The script used to start the plugins
+    plugin_dir : str
+        The path to the directory containing the plugin configuration files
+
+    Raises
+    ------
+    Error
+        When an option is no longer available.
     """
     def __init__(self):
         # If conf_fp is None, we default to the test configuration file
@@ -125,7 +126,7 @@ class ConfigurationManager(object):
             config.readfp(conf_file)
 
         _required_sections = {'main', 'redis', 'postgres', 'smtp', 'ebi',
-                              'ipython', 'portal'}
+                              'portal'}
         if not _required_sections.issubset(set(config.sections())):
             missing = _required_sections - set(config.sections())
             raise MissingConfigSection(', '.join(missing))
@@ -135,9 +136,9 @@ class ConfigurationManager(object):
         self._get_postgres(config)
         self._get_redis(config)
         self._get_ebi(config)
-        self._get_ipython(config)
         self._get_vamps(config)
         self._get_portal(config)
+        self._iframe(config)
 
     def _get_main(self, config):
         """Get the configuration of the main section"""
@@ -148,7 +149,21 @@ class ConfigurationManager(object):
         self.base_data_dir = config.get('main', 'BASE_DATA_DIR') or \
             default_base_data_dir
 
-        self.log_path = config.get('main', 'LOG_PATH')
+        try:
+            log_path = config.get('main', 'LOG_PATH')
+            if log_path:
+                raise Error('The option LOG_PATH in the main section is no '
+                            'longer supported, use LOG_DIR instead.')
+        except NoOptionError:
+            pass
+
+        self.log_dir = config.get('main', 'LOG_DIR')
+        if self.log_dir:
+            # if the option is a directory, it will exist
+            if not isdir(self.log_dir):
+                raise ValueError("The LOG_DIR (%s) option is required to be a "
+                                 "directory." % self.log_dir)
+
         self.base_url = config.get('main', 'BASE_URL')
 
         if not isdir(self.base_data_dir):
@@ -161,15 +176,33 @@ class ConfigurationManager(object):
                              self.working_dir)
         self.max_upload_size = config.getint('main', 'MAX_UPLOAD_SIZE')
         self.require_approval = config.getboolean('main', 'REQUIRE_APPROVAL')
+<<<<<<< HEAD
         self.portal = config.get('main', 'PORTAL')
+=======
+
+        self.qiita_env = config.get('main', 'QIITA_ENV')
+        if not self.qiita_env:
+            self.qiita_env = ""
+
+        self.private_launcher = config.get('main', 'PRIVATE_LAUNCHER')
+
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
         self.plugin_launcher = config.get('main', 'PLUGIN_LAUNCHER')
+        self.plugin_dir = config.get('main', 'PLUGIN_DIR')
+        if not self.plugin_dir:
+            self.plugin_dir = join(expanduser('~'), '.qiita_plugins')
+            if not exists(self.plugin_dir):
+                mkdir(self.plugin_dir)
+        elif not isdir(self.plugin_dir):
+            raise ValueError("The PLUGIN_DIR (%s) folder doesn't exist"
+                             % self.plugin_dir)
 
         self.valid_upload_extension = [ve.strip() for ve in config.get(
             'main', 'VALID_UPLOAD_EXTENSION').split(',')]
         if (not self.valid_upload_extension or
            self.valid_upload_extension == ['']):
             self.valid_upload_extension = []
-            print 'No files will be allowed to be uploaded.'
+            raise ValueError('No files will be allowed to be uploaded.')
 
         self.certificate_file = config.get('main', 'CERTIFICATE_FILE')
         if not self.certificate_file:
@@ -229,10 +262,6 @@ class ConfigurationManager(object):
         self.ebi_center_name = sec_get('EBI_CENTER_NAME')
         self.ebi_organization_prefix = sec_get('EBI_ORGANIZATION_PREFIX')
 
-    def _get_ipython(self, config):
-        self.ipython_contexts = config.get('ipython', 'context').split(',')
-        self.ipython_default = config.get('ipython', 'default')
-
     def _get_vamps(self, config):
         self.vamps_user = config.get('vamps', 'USER')
         self.vamps_pass = config.get('vamps', 'PASSWORD')
@@ -240,3 +269,18 @@ class ConfigurationManager(object):
 
     def _get_portal(self, config):
         self.portal_fp = config.get('portal', 'PORTAL_FP')
+<<<<<<< HEAD
+=======
+        self.portal = config.get('portal', 'PORTAL')
+        self.portal_dir = config.get('portal', 'PORTAL_DIR')
+        if self.portal_dir:
+            if not self.portal_dir.startswith('/'):
+                self.portal_dir = "/%s" % self.portal_dir
+            if self.portal_dir.endswith('/'):
+                self.portal_dir = self.portal_dir[:-1]
+        else:
+            self.portal_dir = ""
+
+    def _iframe(self, config):
+        self.iframe_qiimp = config.get('iframe', 'QIIMP')
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed

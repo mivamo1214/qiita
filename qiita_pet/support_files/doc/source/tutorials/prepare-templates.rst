@@ -139,5 +139,9 @@ additional column is required.
 Example files
 -------------
 
+<<<<<<< HEAD
 You can download an example sample template and prep template from
 `here <ftp://ftp.microbio.me/pub/qiita/sample_prep_template_examples.tgz>`__
+=======
+To learn more about these files and how to build them, please visit :ref:`prepare-information-files`.
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed

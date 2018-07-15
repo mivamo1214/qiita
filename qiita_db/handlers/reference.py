@@ -28,14 +28,21 @@ def _get_reference(r_id):
     try:
         reference = qdb.reference.Reference(r_id)
     except qdb.exceptions.QiitaDBUnknownIDError:
+<<<<<<< HEAD
         return None, False, 'Reference does not exist'
     except qdb.exceptions.QiitaDBError as e:
         return None, False, 'Error instantiating the reference: %s' % str(e)
+=======
+        raise HTTPError(404)
+    except Exception as e:
+        raise HTTPError(500, reason='Error instantiating the reference: '
+                        '%s' % str(e))
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
     return reference, True, ''
 
 
-class ReferenceFilepathsHandler(OauthBaseHandler):
+class ReferenceHandler(OauthBaseHandler):
     @authenticate_oauth
     def get(self, reference_id):
         """Retrieves the filepath information of the given reference
@@ -49,6 +56,7 @@ class ReferenceFilepathsHandler(OauthBaseHandler):
         Returns
         -------
         dict
+<<<<<<< HEAD
             Format:
             {'success': bool,
              'error': str,
@@ -72,5 +80,30 @@ class ReferenceFilepathsHandler(OauthBaseHandler):
 
             response = {'success': success, 'error': error_msg,
                         'filepaths': fps}
+=======
+            'name': str
+                the reference name
+            'version': str
+                the reference version
+            'filepaths': dict of {str: str}
+                The filepaths attached to the reference keyed by filepath type
+        """
+        with qdb.sql_connection.TRN:
+            reference = _get_reference(reference_id)
+
+            fps = {'reference_seqs': reference.sequence_fp}
+            tax_fp = reference.taxonomy_fp
+            if tax_fp:
+                fps["reference_tax"] = tax_fp
+            tree_fp = reference.tree_fp
+            if tree_fp:
+                fps["reference_tree"] = tree_fp
+
+            response = {
+                'name': reference.name,
+                'version': reference.version,
+                'files': fps
+            }
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
         self.write(response)

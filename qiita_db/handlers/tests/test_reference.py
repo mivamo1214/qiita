@@ -29,13 +29,13 @@ class UtilTests(TestCase):
         self.assertEqual(obs, exp)
 
 
-class ReferenceFilepathsHandler(OauthTestingBase):
+class ReferenceHandler(OauthTestingBase):
     def test_get_reference_no_header(self):
-        obs = self.get('/qiita_db/references/1/filepaths/')
+        obs = self.get('/qiita_db/references/1/')
         self.assertEqual(obs.code, 400)
 
     def test_get_reference_does_not_exist(self):
-        obs = self.get('/qiita_db/references/100/filepaths/',
+        obs = self.get('/qiita_db/references/100/',
                        headers=self.header)
         self.assertEqual(obs.code, 200)
         exp = {'success': False, 'error': 'Reference does not exist',
@@ -43,11 +43,12 @@ class ReferenceFilepathsHandler(OauthTestingBase):
         self.assertEqual(loads(obs.body), exp)
 
     def test_get(self):
-        obs = self.get('/qiita_db/references/1/filepaths/',
+        obs = self.get('/qiita_db/references/1/',
                        headers=self.header)
         self.assertEqual(obs.code, 200)
         db_test_raw_dir = qdb.util.get_mountpoint('reference')[0][1]
         path_builder = partial(join, db_test_raw_dir)
+<<<<<<< HEAD
         exp_fps = [
             [path_builder("GreenGenes_13_8_97_otus.fasta"), "reference_seqs"],
             [path_builder("GreenGenes_13_8_97_otu_taxonomy.txt"),
@@ -55,7 +56,16 @@ class ReferenceFilepathsHandler(OauthTestingBase):
             [path_builder("GreenGenes_13_8_97_otus.tree"), "reference_tree"]]
         exp = {'success': True, 'error': '',
                'filepaths': exp_fps}
+=======
+        fps = {
+            'reference_seqs': path_builder("GreenGenes_13_8_97_otus.fasta"),
+            'reference_tax': path_builder(
+                "GreenGenes_13_8_97_otu_taxonomy.txt"),
+            'reference_tree': path_builder("GreenGenes_13_8_97_otus.tree")}
+        exp = {'name': 'Greengenes', 'version': '13_8', 'files': fps}
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
         self.assertEqual(loads(obs.body), exp)
+
 
 if __name__ == '__main__':
     main()

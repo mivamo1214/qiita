@@ -2,7 +2,10 @@
 {% block head %}
 {% from future.utils import viewitems %}
 {% from itertools import chain %}
+<<<<<<< HEAD
 <script src="/static/vendor/js/moi.js"></script>
+=======
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 <script type="text/javascript">
 
 function error(evt) { $('#ws-error').html("<b>Server communication error. Sample removal will not be recorded. Please try again later.</b>"); };
@@ -16,7 +19,7 @@ function check_empty() {
 
 function clear() {
   if(confirm('Are you sure you want to remove all samples?')) {
-    moi.send('clear', {'pids': {% raw [int(p) for p in chain.from_iterable(pid.keys() for sid, pid in viewitems(sel_data))] %} });
+    qiita_websocket.send('clear', {'pids': {% raw [int(p) for p in chain.from_iterable(pid.keys() for sid, pid in viewitems(sel_data))] %} });
   }
 }
 
@@ -27,7 +30,7 @@ function clear_from_html(data) {
 
 function remove_proc_data(pid, sid) {
   if(confirm('Are you sure you want to remove all samples for this processed data?')) {
-    moi.send('remove_pd', {'proc_data': pid, 'samples': [], 'sid': sid});
+    qiita_websocket.send('remove_pd', {'proc_data': pid, 'samples': [], 'sid': sid});
   }
 }
 
@@ -41,7 +44,7 @@ function remove_pd_from_html(data) {
     check_empty();
 }
 
-function remove_sample(sid, pid, sample) { moi.send('remove_sample', {'proc_data': pid, 'samples': [sample], 'sid': sid}); }
+function remove_sample(sid, pid, sample) { qiita_websocket.send('remove_sample', {'proc_data': pid, 'samples': [sample], 'sid': sid}); }
 
 function remove_sample_from_html(data) {
     pid = data.proc_data;
@@ -58,10 +61,17 @@ function remove_sample_from_html(data) {
     check_empty();
 }
 $(document).ready(function() {
+<<<<<<< HEAD
       moi.init(null, window.location.host + '/analysis/selected/socket/', function(){}, error, error);
       moi.add_callback('remove_pd', remove_pd_from_html);
       moi.add_callback('remove_sample', remove_sample_from_html);
       moi.add_callback('clear', clear_from_html);
+=======
+      qiita_websocket.init(window.location.host + '{% raw qiita_config.portal_dir %}/analysis/selected/socket/', error, error);
+      qiita_websocket.add_callback('remove_pd', remove_pd_from_html);
+      qiita_websocket.add_callback('remove_sample', remove_sample_from_html);
+      qiita_websocket.add_callback('clear', clear_from_html);
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
       $('#clear-button').on('click', clear);
       {% if sel_data %}$('#no-selected').hide(){% end %}
     });
@@ -69,7 +79,6 @@ $(document).ready(function() {
 {% end %}
 
 {% block content %}
-{% set static_info = {'data_type', 'processed_date', 'algorithm', 'reference_name', 'reference_version', 'sequence_filepath', 'taxonomy_filepath', 'tree_filepath'}%}
 &nbsp;<br/>
 <h1>Selected Samples</h1>
 <span id="ws-error" style="color:red"></span>
@@ -97,7 +106,7 @@ $(document).ready(function() {
     <h4>Processed Data</h4>
     <table class='table table-striped' id='study{{study.id}}-table'>
     <tr>
-      <th class="col-sm-1">id</th><th class="col-sm-1">Datatype</th><th class="col-sm-2">Processed Date</th><th class="col-sm-2">Algorithm</th><th class="col-sm-2">Reference</th><th class="col-sm-1">Samples</th><th></th><th></th>
+      <th class="col-sm-1">id</th><th class="col-sm-1">Datatype</th><th class="col-sm-2">Processed Date</th><th class="col-sm-2">Algorithm</th><th class="col-sm-2">Parameters</th><th class="col-sm-1">Samples selected from Prep Info</th><th></th><th></th>
     </tr>
   {% for pid, samples in viewitems(proc_datas) %}
     <tr id="proc{{pid}}">
@@ -105,7 +114,15 @@ $(document).ready(function() {
       <td>{{proc_info[pid]["data_type"]}}</td>
       <td>{{proc_info[pid]["processed_date"]}}</td>
       <td>{{proc_info[pid]["algorithm"]}}</td>
-      <td>{{proc_info[pid]["reference_name"]}} {{proc_info[pid]["reference_version"]}}</td>
+      <td>
+        <small>
+          {% if proc_info[pid]["params"] is not None %}
+            {% for key, val in viewitems(proc_info[pid]["params"]) %}
+              <i>{{key}}</i>: {{val}} <br/>
+            {% end %}
+          {% end %}
+        </small>
+      </td>
       <td><span id="proc{{pid}}-sample-count">{% raw len(samples) %}</span></td>
       <td><a href="#" onclick="$('#proc{{pid}}-samples').toggle(); return false;">Show/Hide samples</a></td>
       <td><a href="#" onclick = 'remove_proc_data({{pid}}, {{study.id}})'>Remove</a></td>
@@ -126,18 +143,28 @@ $(document).ready(function() {
             <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
             <h4 class="modal-title" id="myModalLabel">Processed Data {{pid}}</h4>
           </div>
+<<<<<<< HEAD
           <form role="form" action="/analysis/3" method="post">
+=======
+          <form role="form" action="{% raw qiita_config.portal_dir %}/analysis/create/" method="post">
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
           <input type="hidden" name="action" value="create">
             <div class="modal-body">
               <b>Datatype</b>: {{proc_info[pid]["data_type"]}} <br/>
               <b>Processed Date</b>: {{proc_info[pid]["processed_date"]}} <br/>
               <b>Algorithm</b>: {{proc_info[pid]["algorithm"]}} <br/>
-              <b>Reference</b>: {{proc_info[pid]["reference_name"]}} {{proc_info[pid]["reference_version"]}}<br/>
-  {% for key, val in viewitems(proc_info[pid]) %}
-    {% if key not in static_info %}
-      <b>{{key}}</b>: {{val}} <br/>
-    {% end %}
-  {% end %}
+              <b>Parameters</b>:
+                <small>
+                  {% if proc_info[pid]["params"] is not None %}
+                    {% for key, val in viewitems(proc_info[pid]["params"]) %}
+                      <i>{{key}}</i>: {{val}} <br/>
+                    {% end %}
+                  {% end %}
+                </small>
+              <br/>
+              {% for key, val in viewitems(proc_info[pid]) %}
+                <b>{{key}}</b>: {{val}} <br/>
+              {% end %}
             </div>
             <div class="modal-footer">
             </div>
@@ -159,7 +186,11 @@ $(document).ready(function() {
             <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
             <h4 class="modal-title" id="myModalLabel">Create new analysis</h4>
           </div>
+<<<<<<< HEAD
           <form role="form" action="/analysis/3" method="post">
+=======
+          <form role="form" action="{% raw qiita_config.portal_dir %}/analysis/create/" method="post">
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
           <input type="hidden" name="action" value="create">
             <div class="modal-body">
               <div>

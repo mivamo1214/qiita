@@ -11,7 +11,7 @@ INSERT INTO qiita.qiita_user (email, user_level_id, password, name,
     '$2a$12$gnUi8Qg.0tvW243v889BhOBhWLIHyIJjjgaG6dxuRJkUM8nXG9Efe', 'Dude',
     'Nowhere University', '123 fake st, Apt 0, Faketown, CO 80302',
     '111-222-3344'),
-    ('shared@foo.bar', 3,
+    ('shared@foo.bar', 4,
     '$2a$12$gnUi8Qg.0tvW243v889BhOBhWLIHyIJjjgaG6dxuRJkUM8nXG9Efe', 'Shared',
     'Nowhere University', '123 fake st, Apt 0, Faketown, CO 80302',
     '111-222-3344'),
@@ -21,7 +21,7 @@ INSERT INTO qiita.qiita_user (email, user_level_id, password, name,
     '222-444-6789'),
     ('demo@microbio.me', 4,
     '$2a$12$gnUi8Qg.0tvW243v889BhOBhWLIHyIJjjgaG6dxuRJkUM8nXG9Efe', 'Demo',
-    'Qitta Dev', '1345 Colorado Avenue', '303-492-1984');
+    'Qiita Dev', '1345 Colorado Avenue', '303-492-1984');
 
 -- Insert some study persons
 INSERT INTO qiita.study_person (name, email, affiliation, address, phone) VALUES
@@ -62,9 +62,6 @@ INSERT INTO qiita.investigation (investigation_name, investigation_description, 
 -- Insert investigation_study (link study 1 with investigation 1)
 INSERT INTO qiita.investigation_study (investigation_id, study_id) VALUES (1, 1);
 
--- Insert the study experimental factor for study 1
-INSERT INTO qiita.study_experimental_factor (study_id, efo_id) VALUES (1, 1);
-
 -- Add the study_sample for study 1
 INSERT INTO qiita.study_sample (study_id, sample_id, ebi_sample_accession, biosample_accession) VALUES
     (1, '1.SKB8.640193', 'ERS000000', 'SAMEA0000000'),
@@ -95,40 +92,6 @@ INSERT INTO qiita.study_sample (study_id, sample_id, ebi_sample_accession, biosa
     (1, '1.SKB6.640176', 'ERS000025', 'SAMEA0000025'),
     (1, '1.SKM1.640183', 'ERS000025', 'SAMEA0000026');
 
--- Add the study sample columns for study 1
-INSERT INTO qiita.study_sample_columns (study_id, column_name, column_type) VALUES
-    (1, 'sample_id', 'varchar'),
-    (1, 'season_environment', 'varchar'),
-    (1, 'assigned_from_geo', 'varchar'),
-    (1, 'texture', 'varchar'),
-    (1, 'taxon_id', 'varchar'),
-    (1, 'depth', 'float8'),
-    (1, 'host_taxid', 'varchar'),
-    (1, 'common_name', 'varchar'),
-    (1, 'water_content_soil', 'float8'),
-    (1, 'elevation', 'float8'),
-    (1, 'temp', 'float8'),
-    (1, 'tot_nitro', 'float8'),
-    (1, 'samp_salinity', 'float8'),
-    (1, 'altitude', 'float8'),
-    (1, 'env_biome', 'varchar'),
-    (1, 'country', 'varchar'),
-    (1, 'ph', 'float8'),
-    (1, 'anonymized_name', 'varchar'),
-    (1, 'tot_org_carb', 'float8'),
-    (1, 'description_duplicate', 'varchar'),
-    (1, 'env_feature', 'varchar'),
-    (1, 'physical_specimen_location', 'varchar'),
-    (1, 'physical_specimen_remaining', 'bool'),
-    (1, 'dna_extracted', 'bool'),
-    (1, 'sample_type', 'varchar'),
-    (1, 'collection_timestamp', 'timestamp'),
-    (1, 'host_subject_id', 'varchar'),
-    (1, 'description', 'varchar'),
-    (1, 'latitude', 'float8'),
-    (1, 'longitude', 'float8'),
-    (1, 'scientific_name', 'varchar');
-
 -- Crate the sample_1 dynamic table
 CREATE TABLE qiita.sample_1 (
     sample_id                       varchar,
@@ -136,64 +99,64 @@ CREATE TABLE qiita.sample_1 (
     assigned_from_geo               varchar,
     texture                         varchar,
     taxon_id                        varchar,
-    depth                           float8,
+    depth                           varchar,
     host_taxid                      varchar,
     common_name                     varchar,
-    water_content_soil              float8,
-    elevation                       float8,
-    temp                            float8,
-    tot_nitro                       float8,
-    samp_salinity                   float8,
-    altitude                        float8,
+    water_content_soil              varchar,
+    elevation                       varchar,
+    temp                            varchar,
+    tot_nitro                       varchar,
+    samp_salinity                   varchar,
+    altitude                        varchar,
     env_biome                       varchar,
     country                         varchar,
-    ph                              float8,
+    ph                              varchar,
     anonymized_name                 varchar,
-    tot_org_carb                    float8,
+    tot_org_carb                    varchar,
     description_duplicate           varchar,
     env_feature                     varchar,
     physical_specimen_location      varchar,
-    physical_specimen_remaining     bool,
-    dna_extracted                   bool,
+    physical_specimen_remaining     varchar,
+    dna_extracted                   varchar,
     sample_type                     varchar,
-    collection_timestamp            timestamp,
+    collection_timestamp            varchar,
     host_subject_id                 varchar,
     description                     varchar,
-    latitude                        float8,
-    longitude                       float8,
+    latitude                        varchar,
+    longitude                       varchar,
     scientific_name                 varchar,
     CONSTRAINT pk_sample_1 PRIMARY KEY ( sample_id )
 );
 
 -- Populates the sample_1 dynamic table
 INSERT INTO qiita.sample_1 (sample_id, season_environment, assigned_from_geo, texture, taxon_id, depth, host_taxid, common_name, water_content_soil, elevation, temp, tot_nitro, samp_salinity, altitude, env_biome, country, ph, anonymized_name, tot_org_carb, description_duplicate, env_feature, physical_specimen_location, physical_specimen_remaining, dna_extracted, sample_type, collection_timestamp, host_subject_id, description, latitude, longitude, scientific_name) VALUES
-    ('1.SKM7.640188', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '1118232', 0.15, '3483', 'root metagenome', 0.101, 114, 15, 1.3, 7.44, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.82, 'SKM7', 3.31, 'Bucu Roots', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:B6', 'Cannabis Soil Microbiome', 60.1102854322, 74.7123248382, '1118232'),
-    ('1.SKD9.640182', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '1118232', 0.15, '3483', 'root metagenome', 0.178, 114, 15, 1.51, 7.1, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.82, 'SKD9', 4.32, 'Diesel Root', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:D3', 'Cannabis Soil Microbiome', 23.1218032799, 42.838497795, '1118232'),
-    ('1.SKM8.640201', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '1118232', 0.15, '3483', 'root metagenome', 0.101, 114, 15, 1.3, 7.44, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.82, 'SKM8', 3.31, 'Bucu Roots', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:D8', 'Cannabis Soil Microbiome', 3.21190859967, 26.8138925876, '1118232'),
-    ('1.SKB8.640193', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '1118232', 0.15, '3483', 'root metagenome', 0.164, 114, 15, 1.41, 7.15, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.94, 'SKB8', 5, 'Burmese root', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:M7', 'Cannabis Soil Microbiome', 74.0894932572, 65.3283470202, '1118232'),
-    ('1.SKD2.640178', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '410658', 0.15, '3483', 'soil metagenome', 0.178, 114, 15, 1.51, 7.1, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.8, 'SKD2', 4.32, 'Diesel bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:B5', 'Cannabis Soil Microbiome', 53.5050692395, 31.6056761814, '1118232'),
-    ('1.SKM3.640197', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '410658', 0.15, '3483', 'soil metagenome', 0.101, 114, 15, 1.3, 7.44, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.82, 'SKM3', 3.31, 'Bucu bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:B7', 'Cannabis Soil Microbiome', NULL, 31.2003474585, '1118232'),
-    ('1.SKM4.640180', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '939928', 0.15, '3483', 'rhizosphere metagenome', 0.101, 114, 15, 1.3, 7.44, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.82, 'SKM4', 3.31, 'Bucu Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:D2', 'Cannabis Soil Microbiome', NULL, NULL, '1118232'),
-    ('1.SKB9.640200', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '1118232', 0.15, '3483', 'root metagenome', 0.164, 114, 15, 1.41, 7.15, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.8, 'SKB9', 5, 'Burmese root', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:B3', 'Cannabis Soil Microbiome', 12.6245524972, 96.0693176066, '1118232'),
-    ('1.SKB4.640189', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '939928', 0.15, '3483', 'rhizosphere metagenome', 0.164, 114, 15, 1.41, 7.15, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.94, 'SKB4', 5, 'Burmese Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:D7', 'Cannabis Soil Microbiome', 43.9614715197, 82.8516734159, '1118232'),
-    ('1.SKB5.640181', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '939928', 0.15, '3483', 'rhizosphere metagenome', 0.164, 114, 15, 1.41, 7.15, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.94, 'SKB5', 5, 'Burmese Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:M4', 'Cannabis Soil Microbiome', 10.6655599093, 70.784770579, '1118232'),
-    ('1.SKB6.640176', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '939928', 0.15, '3483', 'rhizosphere metagenome', 0.164, 114, 15, 1.41, 7.15, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.94, 'SKB6', 5, 'Burmese Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:D5', 'Cannabis Soil Microbiome', 78.3634273709, 74.423907894, '1118232'),
-    ('1.SKM2.640199', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '410658', 0.15, '3483', 'soil metagenome', 0.101, 114, 15, 1.3, 7.44, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.82, 'SKM2', 3.31, 'Bucu bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:D4', 'Cannabis Soil Microbiome', 82.8302905615, 86.3615778099, '1118232'),
-    ('1.SKM5.640177', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '939928', 0.15, '3483', 'rhizosphere metagenome', 0.101, 114, 15, 1.3, 7.44, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.82, 'SKM5', 3.31, 'Bucu Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:M3', 'Cannabis Soil Microbiome', 44.9725384282, 66.1920014699, '1118232'),
-    ('1.SKB1.640202', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '410658', 0.15, '3483', 'soil metagenome', 0.164, 114, 15, 1.41, 7.15, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.94, 'SKB1', 5, 'Burmese bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:M2', 'Cannabis Soil Microbiome', 4.59216095574, 63.5115213108, '1118232'),
-    ('1.SKD8.640184', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '1118232', 0.15, '3483', 'root metagenome', 0.178, 114, 15, 1.51, 7.1, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.8, 'SKD8', 4.32, 'Diesel Root', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:D9', 'Cannabis Soil Microbiome', 57.571893782, 32.5563076447, '1118232'),
-    ('1.SKD4.640185', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '939928', 0.15, '3483', 'rhizosphere metagenome', 0.178, 114, 15, 1.51, 7.1, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.8, 'SKD4', 4.32, 'Diesel Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:M9', 'Cannabis Soil Microbiome', 40.8623799474, 6.66444220187, '1118232'),
-    ('1.SKB3.640195', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '410658', 0.15, '3483', 'soil metagenome', 0.164, 114, 15, 1.41, 7.15, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.94, 'SKB3', 5, 'Burmese bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:M6', 'Cannabis Soil Microbiome', 95.2060749748, 27.3592668624, '1118232'),
-    ('1.SKM1.640183', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '410658', 0.15, '3483', 'soil metagenome', 0.101, 114, 15, 1.3, 7.44, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.82, 'SKM1', 3.31, 'Bucu bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:D1', 'Cannabis Soil Microbiome', 38.2627021402, 3.48274264219, '1118232'),
-    ('1.SKB7.640196', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '1118232', 0.15, '3483', 'root metagenome', 0.164, 114, 15, 1.41, 7.15, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.94, 'SKB7', 5, 'Burmese root', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:M8', 'Cannabis Soil Microbiome', 13.089194595, 92.5274472082, '1118232'),
-    ('1.SKD3.640198', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '410658', 0.15, '3483', 'soil metagenome', 0.178, 114, 15, 1.51, 7.1, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.8, 'SKD3', 4.32, 'Diesel bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:B1', 'Cannabis Soil Microbiome', 84.0030227585, 66.8954849864, '1118232'),
-    ('1.SKD7.640191', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '1118232', 0.15, '3483', 'root metagenome', 0.178, 114, 15, 1.51, 7.1, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.8, 'SKD7', 4.32, 'Diesel Root', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:D6', 'Cannabis Soil Microbiome', 68.51099627, 2.35063674718, '1118232'),
-    ('1.SKD6.640190', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '939928', 0.15, '3483', 'rhizosphere metagenome', 0.178, 114, 15, 1.51, 7.1, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.8, 'SKD6', 4.32, 'Diesel Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:B9', 'Cannabis Soil Microbiome', 29.1499460692, 82.1270418227, '1118232'),
-    ('1.SKB2.640194', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '410658', 0.15, '3483', 'soil metagenome', 0.164, 114, 15, 1.41, 7.15, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.94, 'SKB2', 5, 'Burmese bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:B4', 'Cannabis Soil Microbiome', 35.2374368957, 68.5041623253, '1118232'),
-    ('1.SKM9.640192', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '1118232', 0.15, '3483', 'root metagenome', 0.101, 114, 15, 1.3, 7.44, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.82, 'SKM9', 3.31, 'Bucu Roots', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:B8', 'Cannabis Soil Microbiome', 12.7065957714, 84.9722975792, '1118232'),
-    ('1.SKM6.640187', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '939928', 0.15, '3483', 'rhizosphere metagenome', 0.101, 114, 15, 1.3, 7.44, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.82, 'SKM6', 3.31, 'Bucu Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:B2', 'Cannabis Soil Microbiome', 0.291867635913, 68.5945325743, '1118232'),
-    ('1.SKD5.640186', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '939928', 0.15, '3483', 'rhizosphere metagenome', 0.178, 114, 15, 1.51, 7.1, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.8, 'SKD5', 4.32, 'Diesel Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:M1', 'Cannabis Soil Microbiome', 85.4121476399, 15.6526750776, '1118232'),
-    ('1.SKD1.640179', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '410658', 0.15, '3483', 'soil metagenome', 0.178, 114, 15, 1.51, 7.1, 0, 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', 6.8, 'SKD1', 4.32, 'Diesel bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '2011-11-11 13:00', '1001:M5', 'Cannabis Soil Microbiome', 68.0991287718, 34.8360987059, '1118232');
+    ('1.SKM7.640188', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '1118232', '0.15', '3483', 'root metagenome', '0.101', '114', '15', '1.3', '7.44', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.82', 'SKM7', '3.31', 'Bucu Roots', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:B6', 'Cannabis Soil Microbiome', 60.1102854322, 74.7123248382, '1118232'),
+    ('1.SKD9.640182', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '1118232', '0.15', '3483', 'root metagenome', '0.178', '114', '15', '1.51', '7.1', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.82', 'SKD9', '4.32', 'Diesel Root', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:D3', 'Cannabis Soil Microbiome', 23.1218032799, 42.838497795, '1118232'),
+    ('1.SKM8.640201', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '1118232', '0.15', '3483', 'root metagenome', '0.101', '114', '15', '1.3', '7.44', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.82', 'SKM8', '3.31', 'Bucu Roots', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:D8', 'Cannabis Soil Microbiome', 3.21190859967, 26.8138925876, '1118232'),
+    ('1.SKB8.640193', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '1118232', '0.15', '3483', 'root metagenome', '0.164', '114', '15', '1.41', '7.15', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.94', 'SKB8', '5', 'Burmese root', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:M7', 'Cannabis Soil Microbiome', 74.0894932572, 65.3283470202, '1118232'),
+    ('1.SKD2.640178', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '410658', '0.15', '3483', 'soil metagenome', '0.178', '114', '15', '1.51', '7.1', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.8', 'SKD2', '4.32', 'Diesel bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:B5', 'Cannabis Soil Microbiome', 53.5050692395, 31.6056761814, '1118232'),
+    ('1.SKM3.640197', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '410658', '0.15', '3483', 'soil metagenome', '0.101', '114', '15', '1.3', '7.44', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.82', 'SKM3', '3.31', 'Bucu bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:B7', 'Cannabis Soil Microbiome', 'Not applicable', 31.2003474585, '1118232'),
+    ('1.SKM4.640180', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '939928', '0.15', '3483', 'rhizosphere metagenome', '0.101', '114', '15', '1.3', '7.44', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.82', 'SKM4', '3.31', 'Bucu Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:D2', 'Cannabis Soil Microbiome', 'Not applicable', 'Not applicable', '1118232'),
+    ('1.SKB9.640200', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '1118232', '0.15', '3483', 'root metagenome', '0.164', '114', '15', '1.41', '7.15', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.8', 'SKB9', '5', 'Burmese root', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:B3', 'Cannabis Soil Microbiome', 12.6245524972, 96.0693176066, '1118232'),
+    ('1.SKB4.640189', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '939928', '0.15', '3483', 'rhizosphere metagenome', '0.164', '114', '15', '1.41', '7.15', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.94', 'SKB4', '5', 'Burmese Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:D7', 'Cannabis Soil Microbiome', 43.9614715197, 82.8516734159, '1118232'),
+    ('1.SKB5.640181', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '939928', '0.15', '3483', 'rhizosphere metagenome', '0.164', '114', '15', '1.41', '7.15', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.94', 'SKB5', '5', 'Burmese Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:M4', 'Cannabis Soil Microbiome', 10.6655599093, 70.784770579, '1118232'),
+    ('1.SKB6.640176', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '939928', '0.15', '3483', 'rhizosphere metagenome', '0.164', '114', '15', '1.41', '7.15', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.94', 'SKB6', '5', 'Burmese Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:D5', 'Cannabis Soil Microbiome', 78.3634273709, 74.423907894, '1118232'),
+    ('1.SKM2.640199', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '410658', '0.15', '3483', 'soil metagenome', '0.101', '114', '15', '1.3', '7.44', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.82', 'SKM2', '3.31', 'Bucu bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:D4', 'Cannabis Soil Microbiome', 82.8302905615, 86.3615778099, '1118232'),
+    ('1.SKM5.640177', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '939928', '0.15', '3483', 'rhizosphere metagenome', '0.101', '114', '15', '1.3', '7.44', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.82', 'SKM5', '3.31', 'Bucu Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:M3', 'Cannabis Soil Microbiome', 44.9725384282, 66.1920014699, '1118232'),
+    ('1.SKB1.640202', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '410658', '0.15', '3483', 'soil metagenome', '0.164', '114', '15', '1.41', '7.15', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.94', 'SKB1', '5', 'Burmese bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:M2', 'Cannabis Soil Microbiome', 4.59216095574, 63.5115213108, '1118232'),
+    ('1.SKD8.640184', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '1118232', '0.15', '3483', 'root metagenome', '0.178', '114', '15', '1.51', '7.1', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.8', 'SKD8', '4.32', 'Diesel Root', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:D9', 'Cannabis Soil Microbiome', 57.571893782, 32.5563076447, '1118232'),
+    ('1.SKD4.640185', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '939928', '0.15', '3483', 'rhizosphere metagenome', '0.178', '114', '15', '1.51', '7.1', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.8', 'SKD4', '4.32', 'Diesel Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:M9', 'Cannabis Soil Microbiome', 40.8623799474, 6.66444220187, '1118232'),
+    ('1.SKB3.640195', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '410658', '0.15', '3483', 'soil metagenome', '0.164', '114', '15', '1.41', '7.15', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.94', 'SKB3', '5', 'Burmese bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:M6', 'Cannabis Soil Microbiome', 95.2060749748, 27.3592668624, '1118232'),
+    ('1.SKM1.640183', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '410658', '0.15', '3483', 'soil metagenome', '0.101', '114', '15', '1.3', '7.44', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.82', 'SKM1', '3.31', 'Bucu bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:D1', 'Cannabis Soil Microbiome', 38.2627021402, 3.48274264219, '1118232'),
+    ('1.SKB7.640196', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '1118232', '0.15', '3483', 'root metagenome', '0.164', '114', '15', '1.41', '7.15', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.94', 'SKB7', '5', 'Burmese root', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:M8', 'Cannabis Soil Microbiome', 13.089194595, 92.5274472082, '1118232'),
+    ('1.SKD3.640198', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '410658', '0.15', '3483', 'soil metagenome', '0.178', '114', '15', '1.51', '7.1', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.8', 'SKD3', '4.32', 'Diesel bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:B1', 'Cannabis Soil Microbiome', 84.0030227585, 66.8954849864, '1118232'),
+    ('1.SKD7.640191', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '1118232', '0.15', '3483', 'root metagenome', '0.178', '114', '15', '1.51', '7.1', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.8', 'SKD7', '4.32', 'Diesel Root', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:D6', 'Cannabis Soil Microbiome', 68.51099627, 2.35063674718, '1118232'),
+    ('1.SKD6.640190', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '939928', '0.15', '3483', 'rhizosphere metagenome', '0.178', '114', '15', '1.51', '7.1', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.8', 'SKD6', '4.32', 'Diesel Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:B9', 'Cannabis Soil Microbiome', 29.1499460692, 82.1270418227, '1118232'),
+    ('1.SKB2.640194', 'winter', 'n', '64.6 sand, 17.6 silt, 17.8 clay', '410658', '0.15', '3483', 'soil metagenome', '0.164', '114', '15', '1.41', '7.15', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.94', 'SKB2', '5', 'Burmese bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:B4', 'Cannabis Soil Microbiome', 35.2374368957, 68.5041623253, '1118232'),
+    ('1.SKM9.640192', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '1118232', '0.15', '3483', 'root metagenome', '0.101', '114', '15', '1.3', '7.44', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.82', 'SKM9', '3.31', 'Bucu Roots', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:B8', 'Cannabis Soil Microbiome', 12.7065957714, 84.9722975792, '1118232'),
+    ('1.SKM6.640187', 'winter', 'n', '63.1 sand, 17.7 silt, 19.2 clay', '939928', '0.15', '3483', 'rhizosphere metagenome', '0.101', '114', '15', '1.3', '7.44', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.82', 'SKM6', '3.31', 'Bucu Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:B2', 'Cannabis Soil Microbiome', 0.291867635913, 68.5945325743, '1118232'),
+    ('1.SKD5.640186', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '939928', '0.15', '3483', 'rhizosphere metagenome', '0.178', '114', '15', '1.51', '7.1', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.8', 'SKD5', '4.32', 'Diesel Rhizo', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:M1', 'Cannabis Soil Microbiome', 85.4121476399, 15.6526750776, '1118232'),
+    ('1.SKD1.640179', 'winter', 'n', '66 sand, 16.3 silt, 17.7 clay', '410658', '0.15', '3483', 'soil metagenome', '0.178', '114', '15', '1.51', '7.1', '0', 'ENVO:Temperate grasslands, savannas, and shrubland biome', 'GAZ:United States of America', '6.8', 'SKD1', '4.32', 'Diesel bulk', 'ENVO:plant-associated habitat', 'ANL', TRUE, TRUE, 'ENVO:soil', '11/11/11 13:00:00', '1001:M5', 'Cannabis Soil Microbiome', 68.0991287718, 34.8360987059, '1118232');
 
 -- Create a new prep template for the added raw data
 INSERT INTO qiita.prep_template (data_type_id, preprocessing_status, investigation_type) VALUES (2, 'success', 'Metagenomics');
@@ -228,6 +191,7 @@ INSERT INTO qiita.prep_template_sample (prep_template_id, sample_id, ebi_experim
     (1, '1.SKB6.640176', 'ERX0000025'),
     (1, '1.SKM1.640183', 'ERX0000026');
 
+<<<<<<< HEAD
 -- Add raw data prep columns
 INSERT INTO qiita.prep_columns (prep_template_id, column_name, column_type) VALUES
     (1, 'sample_id', 'varchar'),
@@ -253,6 +217,37 @@ INSERT INTO qiita.prep_columns (prep_template_id, column_name, column_type) VALU
     (1, 'center_name', 'varchar'),
     (1, 'center_project_name', 'varchar'),
     (1, 'emp_status', 'varchar');
+=======
+-- Add the common prep info for study 2
+INSERT INTO qiita.prep_template_sample (prep_template_id, sample_id, ebi_experiment_accession) VALUES
+    (2, '1.SKB8.640193', 'ERX0000000'),
+    (2, '1.SKD8.640184', 'ERX0000001'),
+    (2, '1.SKB7.640196', 'ERX0000002'),
+    (2, '1.SKM9.640192', 'ERX0000003'),
+    (2, '1.SKM4.640180', 'ERX0000004'),
+    (2, '1.SKM5.640177', 'ERX0000005'),
+    (2, '1.SKB5.640181', 'ERX0000006'),
+    (2, '1.SKD6.640190', 'ERX0000007'),
+    (2, '1.SKB2.640194', 'ERX0000008'),
+    (2, '1.SKD2.640178', 'ERX0000009'),
+    (2, '1.SKM7.640188', 'ERX0000010'),
+    (2, '1.SKB1.640202', 'ERX0000011'),
+    (2, '1.SKD1.640179', 'ERX0000012'),
+    (2, '1.SKD3.640198', 'ERX0000013'),
+    (2, '1.SKM8.640201', 'ERX0000014'),
+    (2, '1.SKM2.640199', 'ERX0000015'),
+    (2, '1.SKB9.640200', 'ERX0000016'),
+    (2, '1.SKD5.640186', 'ERX0000017'),
+    (2, '1.SKM3.640197', 'ERX0000018'),
+    (2, '1.SKD9.640182', 'ERX0000019'),
+    (2, '1.SKB4.640189', 'ERX0000020'),
+    (2, '1.SKD7.640191', 'ERX0000021'),
+    (2, '1.SKM6.640187', 'ERX0000022'),
+    (2, '1.SKD4.640185', 'ERX0000023'),
+    (2, '1.SKB3.640195', 'ERX0000024'),
+    (2, '1.SKB6.640176', 'ERX0000025'),
+    (2, '1.SKM1.640183', 'ERX0000026');
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
 -- Crate the prep_1 dynamic table
 CREATE TABLE qiita.prep_1 (
@@ -319,6 +314,7 @@ INSERT INTO qiita.study_prep_template (study_id, prep_template_id) VALUES (1, 1)
 --   1 (Raw fastq) ---> 2 (demultiplexed) ---> 4 (otu table)
 --                  \-> 3 (demultiplexed)
 INSERT INTO qiita.artifact (name, generated_timestamp, command_id, command_parameters,
+<<<<<<< HEAD
                             visibility_id, artifact_type_id, data_type_id,
                             can_be_submitted_to_ebi, can_be_submitted_to_vamps)
     VALUES ('Raw data 1', 'Mon Oct 1 09:30:27 2012', NULL, NULL, 3, 3, 2, FALSE, FALSE),
@@ -326,6 +322,16 @@ INSERT INTO qiita.artifact (name, generated_timestamp, command_id, command_param
             3, 6, 2, TRUE, TRUE),
            ('Demultiplexed 2', 'Mon Oct 1 11:30:27 2012', 1, '{"max_bad_run_length":3,"min_per_read_length_fraction":0.75,"sequence_max_n":0,"rev_comp_barcode":false,"rev_comp_mapping_barcodes":true,"rev_comp":false,"phred_quality_threshold":3,"barcode_type":"golay_12","max_barcode_errors":1.5,"input_data":1}'::json,
             3, 6, 2, TRUE, TRUE),
+=======
+                            visibility_id, artifact_type_id, data_type_id)
+    VALUES ('Raw data 1', 'Mon Oct 1 09:30:27 2012', NULL, NULL, 3, 3, 2),
+           ('Demultiplexed 1', 'Mon Oct 1 10:30:27 2012', 1, '{"max_bad_run_length":3,"min_per_read_length_fraction":0.75,"sequence_max_n":0,"rev_comp_barcode":false,"rev_comp_mapping_barcodes":false,"rev_comp":false,"phred_quality_threshold":3,"barcode_type":"golay_12","max_barcode_errors":1.5,"input_data":1,"phred_offset":"auto"}'::json,
+            3, 6, 2),
+           ('Demultiplexed 2', 'Mon Oct 1 11:30:27 2012', 1, '{"max_bad_run_length":3,"min_per_read_length_fraction":0.75,"sequence_max_n":0,"rev_comp_barcode":false,"rev_comp_mapping_barcodes":true,"rev_comp":false,"phred_quality_threshold":3,"barcode_type":"golay_12","max_barcode_errors":1.5,"input_data":1,"phred_offset":"auto"}'::json,
+            3, 6, 2),
+           ('BIOM', 'Tue Oct 2 17:30:00 2012', 3, '{"reference":1,"sortmerna_e_value":1,"sortmerna_max_pos":10000,"similarity":0.97,"sortmerna_coverage":0.97,"threads":1,"input_data":2}'::json,
+            3, 7, 2),
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
            ('BIOM', 'Tue Oct 2 17:30:00 2012', 3, '{"reference":1,"sortmerna_e_value":1,"sortmerna_max_pos":10000,"similarity":0.97,"sortmerna_coverage":0.97,"threads":1,"input_data":2}'::json,
             3, 7, 2, FALSE, FALSE);
 
@@ -336,8 +342,13 @@ INSERT INTO qiita.parent_artifact (parent_id, artifact_id)
 
 -- Insert the jobs that processed the previous artifacts
 INSERT INTO qiita.processing_job (processing_job_id, email, command_id, command_parameters, processing_job_status_id)
+<<<<<<< HEAD
     VALUES ('6d368e16-2242-4cf8-87b4-a5dc40bb890b', 'test@foo.bar', 1, '{"max_bad_run_length":3,"min_per_read_length_fraction":0.75,"sequence_max_n":0,"rev_comp_barcode":false,"rev_comp_mapping_barcodes":false,"rev_comp":false,"phred_quality_threshold":3,"barcode_type":"golay_12","max_barcode_errors":1.5,"input_data":1}'::json, 3),
            ('4c7115e8-4c8e-424c-bf25-96c292ca1931', 'test@foo.bar', 1, '{"max_bad_run_length":3,"min_per_read_length_fraction":0.75,"sequence_max_n":0,"rev_comp_barcode":false,"rev_comp_mapping_barcodes":true,"rev_comp":false,"phred_quality_threshold":3,"barcode_type":"golay_12","max_barcode_errors":1.5,"input_data":1}'::json, 3),
+=======
+    VALUES ('6d368e16-2242-4cf8-87b4-a5dc40bb890b', 'test@foo.bar', 1, '{"max_bad_run_length":3,"min_per_read_length_fraction":0.75,"sequence_max_n":0,"rev_comp_barcode":false,"rev_comp_mapping_barcodes":false,"rev_comp":false,"phred_quality_threshold":3,"barcode_type":"golay_12","max_barcode_errors":1.5,"input_data":1,"phred_offset":"auto"}'::json, 3),
+           ('4c7115e8-4c8e-424c-bf25-96c292ca1931', 'test@foo.bar', 1, '{"max_bad_run_length":3,"min_per_read_length_fraction":0.75,"sequence_max_n":0,"rev_comp_barcode":false,"rev_comp_mapping_barcodes":true,"rev_comp":false,"phred_quality_threshold":3,"barcode_type":"golay_12","max_barcode_errors":1.5,"input_data":1,"phred_offset":"auto"}'::json, 3),
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
            ('3c9991ab-6c14-4368-a48c-841e8837a79c', 'test@foo.bar', 3, '{"reference":1,"sortmerna_e_value":1,"sortmerna_max_pos":10000,"similarity":0.97,"sortmerna_coverage":0.97,"threads":1,"input_data":2}'::json, 3);
 
 -- Relate the above jobs with the artifacts
@@ -491,16 +502,25 @@ INSERT INTO qiita.message_user (message_id, email) VALUES (1, 'test@foo.bar'),(1
 
 -- Create a loggin entry
 INSERT INTO qiita.logging (time, severity_id, msg, information)
-    VALUES ('Sun Nov 22 21:29:30 2015', 2, 'Error message', '{}');
+    VALUES ('Sun Nov 22 21:29:30 2015', 2, 'Error message', NULL),
+           ('Sun Nov 22 21:29:30 2015', 2, 'Error message', '{}');
 
 -- Create some processing jobs
 INSERT INTO qiita.processing_job
         (processing_job_id, email, command_id, command_parameters,
          processing_job_status_id, logging_id, heartbeat, step)
+<<<<<<< HEAD
     VALUES ('063e553b-327c-4818-ab4a-adfe58e49860', 'test@foo.bar', 1, '{"max_bad_run_length":3,"min_per_read_length_fraction":0.75,"sequence_max_n":0,"rev_comp_barcode":false,"rev_comp_mapping_barcodes":false,"rev_comp":false,"phred_quality_threshold":3,"barcode_type":"golay_12","max_barcode_errors":1.5,"input_data":1}'::json, 1, NULL, NULL, NULL),
            ('bcc7ebcd-39c1-43e4-af2d-822e3589f14d', 'test@foo.bar', 2, '{"min_seq_len":100,"max_seq_len":1000,"trim_seq_length":false,"min_qual_score":25,"max_ambig":6,"max_homopolymer":6,"max_primer_mismatch":0,"barcode_type":"golay_12","max_barcode_errors":1.5,"disable_bc_correction":false,"qual_score_window":0,"disable_primers":false,"reverse_primers":"disable","reverse_primer_mismatches":0,"truncate_ambi_bases":false,"input_data":1}'::json, 2, NULL, 'Sun Nov 22 21:00:00 2015', 'demultiplexing'),
            ('b72369f9-a886-4193-8d3d-f7b504168e75', 'shared@foo.bar', 1, '{"max_bad_run_length":3,"min_per_read_length_fraction":0.75,"sequence_max_n":0,"rev_comp_barcode":false,"rev_comp_mapping_barcodes":true,"rev_comp":false,"phred_quality_threshold":3,"barcode_type":"golay_12","max_barcode_errors":1.5,"input_data":1}'::json, 3, NULL, 'Sun Nov 22 21:15:00 2015', NULL),
            ('d19f76ee-274e-4c1b-b3a2-a12d73507c55', 'shared@foo.bar', 3, '{"reference":1,"sortmerna_e_value":1,"sortmerna_max_pos":10000,"similarity":0.97,"sortmerna_coverage":0.97,"threads":1,"input_data":2}'::json, 4, 1, 'Sun Nov 22 21:30:00 2015', 'generating demux file');
+=======
+    VALUES ('063e553b-327c-4818-ab4a-adfe58e49860', 'test@foo.bar', 1, '{"max_bad_run_length":3,"min_per_read_length_fraction":0.75,"sequence_max_n":0,"rev_comp_barcode":false,"rev_comp_mapping_barcodes":false,"rev_comp":false,"phred_quality_threshold":3,"barcode_type":"golay_12","max_barcode_errors":1.5,"input_data":1,"phred_offset":"auto"}'::json, 1, NULL, NULL, NULL),
+           ('bcc7ebcd-39c1-43e4-af2d-822e3589f14d', 'test@foo.bar', 2, '{"min_seq_len":100,"max_seq_len":1000,"trim_seq_length":false,"min_qual_score":25,"max_ambig":6,"max_homopolymer":6,"max_primer_mismatch":0,"barcode_type":"golay_12","max_barcode_errors":1.5,"disable_bc_correction":false,"qual_score_window":0,"disable_primers":false,"reverse_primers":"disable","reverse_primer_mismatches":0,"truncate_ambi_bases":false,"input_data":1}'::json, 2, NULL, 'Sun Nov 22 21:00:00 2015', 'demultiplexing'),
+           ('b72369f9-a886-4193-8d3d-f7b504168e75', 'shared@foo.bar', 1, '{"max_bad_run_length":3,"min_per_read_length_fraction":0.75,"sequence_max_n":0,"rev_comp_barcode":false,"rev_comp_mapping_barcodes":true,"rev_comp":false,"phred_quality_threshold":3,"barcode_type":"golay_12","max_barcode_errors":1.5,"input_data":1,"phred_offset":"auto"}'::json, 3, NULL, 'Sun Nov 22 21:15:00 2015', NULL),
+           ('d19f76ee-274e-4c1b-b3a2-a12d73507c55', 'shared@foo.bar', 3, '{"reference":1,"sortmerna_e_value":1,"sortmerna_max_pos":10000,"similarity":0.97,"sortmerna_coverage":0.97,"threads":1,"input_data":2}'::json, 4, 1, 'Sun Nov 22 21:30:00 2015', 'generating demux file'),
+           ('ac653cb5-76a6-4a45-929e-eb9b2dee6b63', 'test@foo.bar', 1, '{"max_bad_run_length":3,"min_per_read_length_fraction":0.75,"sequence_max_n":0,"rev_comp_barcode":false,"rev_comp_mapping_barcodes":false,"rev_comp":false,"phred_quality_threshold":3,"barcode_type":"golay_12","max_barcode_errors":1.5,"input_data":1}'::json, 5, NULL, NULL, NULL);
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
 INSERT INTO qiita.artifact_processing_job (artifact_id, processing_job_id)
     VALUES (1, '063e553b-327c-4818-ab4a-adfe58e49860'),

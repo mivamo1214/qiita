@@ -8,7 +8,6 @@ from __future__ import division
 # The full license is in the file LICENSE, distributed with this software.
 # -----------------------------------------------------------------------------
 
-from warnings import simplefilter
 from os import remove
 from os.path import join, isdir, exists
 from shutil import rmtree
@@ -17,13 +16,16 @@ from unittest import TestCase, main
 from xml.etree import ElementTree as ET
 from functools import partial
 import pandas as pd
-from datetime import date, datetime
+import warnings
+from datetime import date
+from skbio.util import safe_md5
+from future.utils import viewitems
 
 from h5py import File
+from qiita_files.demux import to_hdf5
 
 from qiita_ware.ebi import EBISubmission
 from qiita_ware.exceptions import EBISubmissionError
-from qiita_ware.demux import to_hdf5
 from qiita_core.qiita_settings import qiita_config
 from qiita_db.util import get_mountpoint
 from qiita_db.study import Study, StudyPerson
@@ -35,13 +37,24 @@ from qiita_db.software import Parameters, DefaultParameters
 from qiita_core.util import qiita_test_checker
 
 
+@qiita_test_checker()
 class TestEBISubmission(TestCase):
     def setUp(self):
         self.files_to_remove = []
         self.temp_dir = mkdtemp()
         self.files_to_remove.append(self.temp_dir)
+        self.study_id = None
 
     def tearDown(self):
+        if self.study_id and Study.exists("Test EBI study"):
+            study = Study(self.study_id)
+            for a in study.artifacts():
+                Artifact.delete(a.id)
+            for pt in study.prep_templates():
+                PrepTemplate.delete(pt.id)
+            SampleTemplate.delete(self.study_id)
+            Study.delete(self.study_id)
+
         for f in self.files_to_remove:
             if exists(f):
                 if isdir(f):
@@ -49,8 +62,6 @@ class TestEBISubmission(TestCase):
                 else:
                     remove(f)
 
-
-class TestEBISubmissionReadOnly(TestEBISubmission):
     def test_init(self):
         artifact_id = 3
         action = 'ADD'
@@ -75,8 +86,9 @@ class TestEBISubmissionReadOnly(TestEBISubmission):
         self.assertEqual(e.investigation_type, 'Metagenomics')
         self.assertIsNone(e.new_investigation_type)
         self.assertItemsEqual(e.sample_template, e.samples)
-        self.assertItemsEqual(e.publications, [['10.100/123456', '123456'],
-                                               ['10.100/7891011', '7891011']])
+        self.assertItemsEqual(e.publications, [
+            ['10.100/123456', True], ['123456', False],
+            ['10.100/7891011', True], ['7891011', False]])
         self.assertEqual(e.action, action)
 
         self.assertEqual(e.ascp_reply, join(e.full_ebi_dir, 'ascp_reply.txt'))
@@ -249,9 +261,6 @@ class TestEBISubmissionReadOnly(TestEBISubmission):
                '%20ebi_seq_xfer_pass"')
         self.assertEqual(obs, exp)
 
-
-@qiita_test_checker()
-class TestEBISubmissionWriteRead(TestEBISubmission):
     def write_demux_files(self, prep_template, sequences='FASTA-EXAMPLE'):
         """Writes a demux test file to avoid duplication of code"""
         fna_fp = join(self.temp_dir, 'seqs.fna')
@@ -293,18 +302,16 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
                                                          valid_metadata=False):
         """Creates new prep-template/demux-file to avoid duplication of code"""
 
-        # ignoring warnings generated when adding templates
-        simplefilter("ignore")
         # creating prep template without required EBI submission columns
         if not valid_metadata:
             metadata_dict = {
-                'SKD6.640190': {'center_name': 'ANL',
+                'SKD6.640190': {'center_name': 'ANL', 'barcode': 'AAA',
                                 'center_project_name': 'Test Project'},
-                'SKM6.640187': {'center_name': 'ANL',
+                'SKM6.640187': {'center_name': 'ANL', 'barcode': 'AAA',
                                 'center_project_name': 'Test Project',
                                 'platform': 'ILLUMINA',
                                 'instrument_model': 'Not valid'},
-                'SKD9.640182': {'center_name': 'ANL',
+                'SKD9.640182': {'center_name': 'ANL', 'barcode': 'AAA',
                                 'center_project_name': 'Test Project',
                                 'platform': 'ILLUMINA',
                                 'instrument_model': 'Illumina MiSeq',
@@ -317,7 +324,7 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
             investigation_type = None
         else:
             metadata_dict = {
-                'SKD6.640190': {'center_name': 'ANL',
+                'SKD6.640190': {'center_name': 'ANL', 'barcode': 'AAA',
                                 'center_project_name': 'Test Project',
                                 'platform': 'ILLUMINA',
                                 'instrument_model': 'Illumina MiSeq',
@@ -326,7 +333,7 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
                                     'microbiome of soil and rhizosphere',
                                 'library_construction_protocol':
                                     'PMID: 22402401'},
-                'SKM6.640187': {'center_name': 'ANL',
+                'SKM6.640187': {'center_name': 'ANL', 'barcode': 'AAA',
                                 'center_project_name': 'Test Project',
                                 'platform': 'ILLUMINA',
                                 'instrument_model': 'Illumina MiSeq',
@@ -336,7 +343,7 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
                                 'library_construction_protocol':
                                     'PMID: 22402401',
                                 'extra_value': 1.2},
-                'SKD9.640182': {'center_name': 'ANL',
+                'SKD9.640182': {'center_name': 'ANL', 'barcode': 'AAA',
                                 'center_project_name': 'Test Project',
                                 'platform': 'ILLUMINA',
                                 'instrument_model': 'Illumina MiSeq',
@@ -348,17 +355,18 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
                                 'extra_value': 'Unspecified'}
             }
             investigation_type = "Metagenomics"
-        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index')
-        pt = PrepTemplate.create(metadata, Study(1), "18S",
-                                 investigation_type=investigation_type)
+        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index',
+                                          dtype=str)
+
+        with warnings.catch_warnings(record=True):
+            pt = PrepTemplate.create(metadata, Study(1), "18S",
+                                     investigation_type=investigation_type)
         artifact = self.write_demux_files(pt)
 
         return artifact
 
     def generate_new_study_with_preprocessed_data(self):
         """Creates a new study up to the processed data for testing"""
-        # ignoring warnings generated when adding templates
-        simplefilter("ignore")
         info = {
             "timeseries_type_id": 1,
             "metadata_complete": True,
@@ -372,26 +380,29 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
             "principal_investigator_id": StudyPerson(3),
             "lab_person_id": StudyPerson(1)
         }
-        study = Study.create(User('test@foo.bar'), "Test EBI study", [1], info)
+        study = Study.create(User('test@foo.bar'), "Test EBI study", info)
+        self.study_id = study.id
         metadata_dict = {
-            'Sample1': {'collection_timestamp': datetime(2015, 6, 1, 7, 0, 0),
+            'Sample1': {'collection_timestamp': '06/01/15 07:00:00',
                         'physical_specimen_location': 'location1',
                         'taxon_id': 9606,
                         'scientific_name': 'homo sapiens',
                         'Description': 'Test Sample 1'},
-            'Sample2': {'collection_timestamp': datetime(2015, 6, 2, 7, 0, 0),
+            'Sample2': {'collection_timestamp': '06/02/15 07:00:00',
                         'physical_specimen_location': 'location1',
                         'taxon_id': 9606,
                         'scientific_name': 'homo sapiens',
                         'Description': 'Test Sample 2'},
-            'Sample3': {'collection_timestamp': datetime(2015, 6, 3, 7, 0, 0),
+            'Sample3': {'collection_timestamp': '06/03/15 07:00:00',
                         'physical_specimen_location': 'location1',
                         'taxon_id': 9606,
                         'scientific_name': 'homo sapiens',
                         'Description': 'Test Sample 3'}
         }
-        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index')
-        SampleTemplate.create(metadata, study)
+        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index',
+                                          dtype=str)
+        with warnings.catch_warnings(record=True):
+            SampleTemplate.create(metadata, study)
         metadata_dict = {
             'Sample1': {'primer': 'GTGCCAGCMGCCGCGGTAA',
                         'barcode': 'CGTAGAGCTCTC',
@@ -415,8 +426,10 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
                         'library_construction_protocol': 'Protocol ABC',
                         'experiment_design_description': "Random value 3"},
         }
-        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index')
-        pt = PrepTemplate.create(metadata, study, "16S", 'Metagenomics')
+        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index',
+                                          dtype=str)
+        with warnings.catch_warnings(record=True):
+            pt = PrepTemplate.create(metadata, study, "16S", 'Metagenomics')
         fna_fp = join(self.temp_dir, 'seqs.fna')
         demux_fp = join(self.temp_dir, 'demux.seqs')
         with open(fna_fp, 'w') as f:
@@ -446,14 +459,20 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
 
         artifact = self.generate_new_prep_template_and_write_demux_files()
         # raise error as we are missing columns
+        # artifact.prep_templates[0] cause there should only be 1
         exp_text = ("Errors found during EBI submission for study #1, "
+<<<<<<< HEAD
                     "artifact #5 and prep template #2:\nUnrecognized "
+=======
+                    "artifact #%d and prep template #%d:\nUnrecognized "
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
                     "investigation type: 'None'. This term is neither one of "
                     "the official terms nor one of the user-defined terms in "
                     "the ENA ontology.\nThese samples do not have a valid "
                     "platform (instrumet model wasn't checked): "
                     "1.SKD6.640190\nThese samples do not have a valid "
-                    "instrument model: 1.SKM6.640187")
+                    "instrument model: 1.SKM6.640187" % (
+                        artifact.id, artifact.prep_templates[0].id))
         with self.assertRaises(EBISubmissionError) as e:
             EBISubmission(artifact.id, 'ADD')
         self.assertEqual(exp_text, str(e.exception))
@@ -513,6 +532,10 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
         self.files_to_remove.append(submission.full_ebi_dir)
         submission.generate_demultiplexed_fastq(mtime=1)
         obs = ET.tostring(submission.generate_run_xml())
+
+        md5_sums = {s: safe_md5(open(fp)).hexdigest()
+                    for s, fp in viewitems(submission.sample_demux_fps)}
+
         exp = RUNXML_NEWSTUDY % {
             'study_alias': submission._get_study_alias(),
             'ebi_dir': submission.ebi_dir,
@@ -520,7 +543,10 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
             'center_name': qiita_config.ebi_center_name,
             'artifact_id': artifact.id,
             'study_id': artifact.study.id,
-            'pt_id': artifact.prep_templates[0].id
+            'pt_id': artifact.prep_templates[0].id,
+            'sample_1': md5_sums['%d.Sample1' % self.study_id],
+            'sample_2': md5_sums['%d.Sample2' % self.study_id],
+            'sample_3': md5_sums['%d.Sample3' % self.study_id]
         }
         exp = ''.join([l.strip() for l in exp.splitlines()])
         self.assertEqual(obs, exp)
@@ -604,7 +630,7 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
         ebi_submission = EBISubmission(artifact.id, 'ADD')
         self.files_to_remove.append(ebi_submission.full_ebi_dir)
         with self.assertRaises(EBISubmissionError):
-            ebi_submission.generate_demultiplexed_fastq()
+            ebi_submission.generate_demultiplexed_fastq(rewrite_fastq=True)
 
         artifact = self.write_demux_files(PrepTemplate(1), 'WRONG-SEQS')
         ebi_submission = EBISubmission(artifact.id, 'ADD')
@@ -623,7 +649,11 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
         # This is testing that only the samples with sequences are going to
         # be created
         ebi_submission = EBISubmission(artifact.id, 'ADD')
-        obs_demux_samples = ebi_submission.generate_demultiplexed_fastq()
+        # adding rewrite_fastq=True as it's possible to have duplicated ids
+        # and this will assure to get the right test
+        obs_demux_samples = ebi_submission.generate_demultiplexed_fastq(
+            rewrite_fastq=True)
+
         self.files_to_remove.append(ebi_submission.full_ebi_dir)
         self.assertItemsEqual(obs_demux_samples, exp_demux_samples)
         # testing that the samples/samples_prep and demux_samples are the same
@@ -641,6 +671,104 @@ class TestEBISubmissionWriteRead(TestEBISubmission):
         self.assertItemsEqual(obs_demux_samples, ebi_submission.samples.keys())
         self.assertItemsEqual(obs_demux_samples,
                               ebi_submission.samples_prep.keys())
+
+    def _generate_per_sample_FASTQs(self, prep_template, sequences):
+        # generating a per_sample_FASTQ artifact, adding should_rename so
+        # we can test that the script uses the correct names during
+        # copy/gz-generation
+        files = []
+        for sn, seqs in viewitems(sequences):
+            fn = join(self.temp_dir, sn + 'should_rename.fastq')
+            with open(fn, 'w') as fh:
+                fh.write(seqs)
+            files.append(fn)
+            self.files_to_remove.append(fn)
+
+        if prep_template.artifact is None:
+            artifact = Artifact.create(
+                [(fp, 1) for fp in files], "per_sample_FASTQ",
+                prep_template=prep_template)
+        else:
+            params = Parameters.from_default_params(
+                DefaultParameters(1),
+                {'input_data': prep_template.artifact.id})
+            artifact = Artifact.create(
+                # 1 is raw_forward_seqs
+                [(fp, 1) for fp in files], "per_sample_FASTQ",
+                parents=[prep_template.artifact],
+                processing_parameters=params)
+
+        return artifact
+
+    def test_generate_demultiplexed_per_sample_fastq(self):
+        # testing failure due to "extra" filepaths
+        artifact = self._generate_per_sample_FASTQs(
+            PrepTemplate(1), FASTQ_EXAMPLE)
+        ebi_submission = EBISubmission(artifact.id, 'ADD')
+        self.files_to_remove.append(ebi_submission.full_ebi_dir)
+
+        with self.assertRaises(EBISubmissionError):
+            ebi_submission.generate_demultiplexed_fastq()
+
+        # testing that we generate the correct samples
+        exp_samples = ['1.SKM4.640180', '1.SKB2.640194']
+        metadata_dict = {
+            'SKB2.640194': {'center_name': 'ANL',
+                            'center_project_name': 'Test Project',
+                            'platform': 'ILLUMINA',
+                            'instrument_model': 'Illumina MiSeq',
+                            'experiment_design_description':
+                                'microbiome of soil and rhizosphere',
+                            'library_construction_protocol':
+                                'PMID: 22402401',
+                            'run_prefix': '1.SKB2.640194'},
+            'SKM4.640180': {'center_name': 'ANL',
+                            'center_project_name': 'Test Project',
+                            'platform': 'ILLUMINA',
+                            'instrument_model': 'Illumina MiSeq',
+                            'experiment_design_description':
+                                'microbiome of soil and rhizosphere',
+                            'library_construction_protocol':
+                                'PMID: 22402401',
+                            'run_prefix': '1.SKM4.640180'}}
+        metadata = pd.DataFrame.from_dict(
+            metadata_dict, orient='index', dtype=str)
+        with warnings.catch_warnings(record=True):
+            pt = PrepTemplate.create(metadata, Study(1), "18S",
+                                     investigation_type="Metagenomics")
+        artifact = self._generate_per_sample_FASTQs(pt, FASTQ_EXAMPLE)
+
+        # this should fail due to missing columns
+        with self.assertRaises(EBISubmissionError) as err:
+            ebi_submission = EBISubmission(artifact.id, 'ADD')
+        self.assertIn('Missing column in the prep template: barcode',
+                      str(err.exception))
+        metadata_dict = {
+            'SKB2.640194': {'barcode': 'AAA', 'primer': 'CCCC'},
+            'SKM4.640180': {'barcode': 'CCC', 'primer': 'AAAA'}}
+        metadata = pd.DataFrame.from_dict(
+            metadata_dict, orient='index', dtype=str)
+
+        with warnings.catch_warnings(record=True):
+            pt.extend_and_update(metadata)
+        ebi_submission = EBISubmission(artifact.id, 'ADD')
+        self.files_to_remove.append(ebi_submission.full_ebi_dir)
+
+        obs_demux_samples = ebi_submission.generate_demultiplexed_fastq()
+        self.assertItemsEqual(obs_demux_samples, exp_samples)
+        self.assertItemsEqual(ebi_submission.samples.keys(), exp_samples)
+        self.assertItemsEqual(ebi_submission.samples_prep.keys(), exp_samples)
+
+        # at this point the full_ebi_dir has been created so we can test that
+        # the ADD actually works without rewriting the files
+        ebi_submission = EBISubmission(artifact.id, 'ADD')
+        obs_demux_samples = ebi_submission.generate_demultiplexed_fastq()
+        self.assertItemsEqual(obs_demux_samples, exp_samples)
+        self.assertItemsEqual(ebi_submission.samples.keys(), exp_samples)
+        self.assertItemsEqual(ebi_submission.samples_prep.keys(), exp_samples)
+
+        Artifact.delete(artifact.id)
+        PrepTemplate.delete(pt.id)
 
     def test_generate_send_sequences_cmd(self):
         artifact = self.write_demux_files(PrepTemplate(1))
@@ -786,6 +914,29 @@ CCACCCAGTAAC
 CCACCCAGTAAC
 """
 
+FASTQ_EXAMPLE = {
+    '1.SKB2.640194': """@1.SKB2.640194_1 X orig_bc=X new_bc=X bc_diffs=0
+CCACCCAGTAAC
++
+~~~~~~~~~~~~
+@1.SKB2.640194_2 X orig_bc=X new_bc=X bc_diffs=0
+CCACCCAGTAAC
++
+~~~~~~~~~~~~
+@1.SKB2.640194_3 X orig_bc=X new_bc=X bc_diffs=0
++
+~~~~~~~~~~~~
+CCACCCAGTAAC""",
+    '1.SKM4.640180': """@1.SKM4.640180_4 X orig_bc=X new_bc=X bc_diffs=0
+CCACCCAGTAAC
++
+~~~~~~~~~~~~
+>1.SKM4.640180_5 X orig_bc=X new_bc=X bc_diffs=0
+CCACCCAGTAAC
++
+~~~~~~~~~~~~"""
+}
+
 FASTA_EXAMPLE_2 = """>{0}.Sample1_1 X orig_bc=X new_bc=X bc_diffs=0
 CCACCCAGTAAC
 >{0}.Sample1_2 X orig_bc=X new_bc=X bc_diffs=0
@@ -819,7 +970,7 @@ center_name="%(center_name)s">
     <DESCRIPTION>Cannabis Soil Microbiome</DESCRIPTION>
     <SAMPLE_ATTRIBUTES>
       <SAMPLE_ATTRIBUTE>
-        <TAG>altitude</TAG><VALUE>0.0</VALUE>
+        <TAG>altitude</TAG><VALUE>0</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
         <TAG>anonymized_name</TAG><VALUE>SKB2</VALUE>
@@ -842,10 +993,10 @@ center_name="%(center_name)s">
         <TAG>description_duplicate</TAG><VALUE>Burmese bulk</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
-        <TAG>dna_extracted</TAG><VALUE>True</VALUE>
+        <TAG>dna_extracted</TAG><VALUE>true</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
-        <TAG>elevation</TAG><VALUE>114.0</VALUE>
+        <TAG>elevation</TAG><VALUE>114</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
         <TAG>env_biome</TAG><VALUE>ENVO:Temperate grasslands, savannas, and \
@@ -873,7 +1024,7 @@ shrubland biome</VALUE>
         <TAG>physical_specimen_location</TAG><VALUE>ANL</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
-        <TAG>physical_specimen_remaining</TAG><VALUE>True</VALUE>
+        <TAG>physical_specimen_remaining</TAG><VALUE>true</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
         <TAG>samp_salinity</TAG><VALUE>7.15</VALUE>
@@ -885,7 +1036,7 @@ shrubland biome</VALUE>
         <TAG>season_environment</TAG><VALUE>winter</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
-        <TAG>temp</TAG><VALUE>15.0</VALUE></SAMPLE_ATTRIBUTE>
+        <TAG>temp</TAG><VALUE>15</VALUE></SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
         <TAG>texture</TAG><VALUE>64.6 sand, 17.6 silt, 17.8 clay</VALUE>
       </SAMPLE_ATTRIBUTE>
@@ -893,7 +1044,7 @@ shrubland biome</VALUE>
         <TAG>tot_nitro</TAG><VALUE>1.41</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
-        <TAG>tot_org_carb</TAG><VALUE>5.0</VALUE>
+        <TAG>tot_org_carb</TAG><VALUE>5</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
         <TAG>water_content_soil</TAG><VALUE>0.164</VALUE>
@@ -910,7 +1061,7 @@ center_name="%(center_name)s">
     <DESCRIPTION>Cannabis Soil Microbiome</DESCRIPTION>
       <SAMPLE_ATTRIBUTES>
       <SAMPLE_ATTRIBUTE>
-        <TAG>altitude</TAG><VALUE>0.0</VALUE>
+        <TAG>altitude</TAG><VALUE>0</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
         <TAG>anonymized_name</TAG><VALUE>SKB3</VALUE>
@@ -934,10 +1085,10 @@ center_name="%(center_name)s">
         <TAG>description_duplicate</TAG><VALUE>Burmese bulk</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
-        <TAG>dna_extracted</TAG><VALUE>True</VALUE>
+        <TAG>dna_extracted</TAG><VALUE>true</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
-        <TAG>elevation</TAG><VALUE>114.0</VALUE>
+        <TAG>elevation</TAG><VALUE>114</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
         <TAG>env_biome</TAG><VALUE>ENVO:Temperate grasslands, savannas, and \
@@ -965,7 +1116,7 @@ shrubland biome</VALUE>
         <TAG>physical_specimen_location</TAG><VALUE>ANL</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
-        <TAG>physical_specimen_remaining</TAG><VALUE>True</VALUE>
+        <TAG>physical_specimen_remaining</TAG><VALUE>true</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
         <TAG>samp_salinity</TAG><VALUE>7.15</VALUE>
@@ -977,7 +1128,7 @@ shrubland biome</VALUE>
         <TAG>season_environment</TAG><VALUE>winter</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
-        <TAG>temp</TAG><VALUE>15.0</VALUE>
+        <TAG>temp</TAG><VALUE>15</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
         <TAG>texture</TAG><VALUE>64.6 sand, 17.6 silt, 17.8 clay</VALUE>
@@ -986,7 +1137,7 @@ shrubland biome</VALUE>
         <TAG>tot_nitro</TAG><VALUE>1.41</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
-        <TAG>tot_org_carb</TAG><VALUE>5.0</VALUE>
+        <TAG>tot_org_carb</TAG><VALUE>5</VALUE>
       </SAMPLE_ATTRIBUTE>
       <SAMPLE_ATTRIBUTE>
         <TAG>water_content_soil</TAG><VALUE>0.164</VALUE>
@@ -1387,7 +1538,7 @@ Sample1" center_name="%(center_name)s">
 %(study_id)s.Sample1" />
     <DATA_BLOCK>
       <FILES>
-        <FILE checksum="83feb38387c3ccf9da28be56def4916e" \
+        <FILE checksum="%(sample_1)s" \
 checksum_method="MD5" filename="%(ebi_dir)s/%(study_id)s.Sample1.fastq.gz" \
 filetype="fastq" quality_scoring_system="phred" />
       </FILES>
@@ -1399,7 +1550,7 @@ Sample2" center_name="%(center_name)s">
 %(study_id)s.Sample2" />
     <DATA_BLOCK>
       <FILES>
-        <FILE checksum="49b7fd3db7efad3c11fa305bb331c03e" \
+        <FILE checksum="%(sample_2)s" \
 checksum_method="MD5" filename="%(ebi_dir)s/%(study_id)s.Sample2.fastq.gz" \
 filetype="fastq" quality_scoring_system="phred" />
       </FILES>
@@ -1411,7 +1562,7 @@ Sample3" center_name="%(center_name)s">
 %(study_id)s.Sample3" />
     <DATA_BLOCK>
       <FILES>
-        <FILE checksum="55b49d49b3c1bd0edf4d291ba8ce66a1" \
+        <FILE checksum="%(sample_3)s" \
 checksum_method="MD5" filename="%(ebi_dir)s/%(study_id)s.Sample3.fastq.gz" \
 filetype="fastq" quality_scoring_system="phred" />
       </FILES>
@@ -1569,6 +1720,7 @@ experiment.xml run.xml       </INFO>
   <ACTIONS>HOLD</ACTIONS>
 </RECEIPT>
 """
+
 
 if __name__ == "__main__":
     main()

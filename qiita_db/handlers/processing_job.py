@@ -33,8 +33,13 @@ def _get_job(job_id):
 
     try:
         job = qdb.processing_job.ProcessingJob(job_id)
+<<<<<<< HEAD
     except qdb.exceptions.QiitaDBError as e:
         return None, False, 'Error instantiating the job: %s' % str(e)
+=======
+    except Exception as e:
+        raise HTTPError(500, reason='Error instantiating the job: %s' % str(e))
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
     return job, True, ''
 
@@ -102,6 +107,7 @@ class HeartbeatHandler(OauthBaseHandler):
             - error: in case that success is false, it contains the error msg
         """
         with qdb.sql_connection.TRN:
+<<<<<<< HEAD
             job, success, error_msg = _get_job(job_id)
             if success:
                 job_status = job.status
@@ -116,12 +122,22 @@ class HeartbeatHandler(OauthBaseHandler):
 
         response = {'success': success, 'error': error_msg}
         self.write(response)
+=======
+            job = _get_job(job_id)
+
+            try:
+                job.update_heartbeat_state()
+            except qdb.exceptions.QiitaDBOperationNotPermittedError as e:
+                raise HTTPError(403, reason=str(e))
+
+        self.finish()
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
 
 class ActiveStepHandler(OauthBaseHandler):
     @authenticate_oauth
     def post(self, job_id):
-        """Changes the current exectuion step of the given job
+        """Changes the current execution step of the given job
 
         Parameters
         ----------
@@ -138,6 +154,7 @@ class ActiveStepHandler(OauthBaseHandler):
             - error: in case that success is false, it contains the error msg
         """
         with qdb.sql_connection.TRN:
+<<<<<<< HEAD
             job, success, error_msg = _get_job(job_id)
             if success:
                 job_status = job.status
@@ -151,6 +168,17 @@ class ActiveStepHandler(OauthBaseHandler):
 
         response = {'success': success, 'error': error_msg}
         self.write(response)
+=======
+            job = _get_job(job_id)
+            payload = loads(self.request.body)
+            step = payload['step']
+            try:
+                job.step = step
+            except qdb.exceptions.QiitaDBOperationNotPermittedError as e:
+                raise HTTPError(403, reason=str(e))
+
+        self.finish()
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
 
 class CompleteHandler(OauthBaseHandler):
@@ -173,6 +201,7 @@ class CompleteHandler(OauthBaseHandler):
             - error: in case that success is false, it contains the error msg
         """
         with qdb.sql_connection.TRN:
+<<<<<<< HEAD
             job, success, error_msg = _get_job(job_id)
             if success:
                 if job.status != 'running':
@@ -202,3 +231,43 @@ class CompleteHandler(OauthBaseHandler):
 
         response = {'success': success, 'error': error_msg}
         self.write(response)
+=======
+            job = _get_job(job_id)
+
+            if job.status != 'running':
+                raise HTTPError(
+                    403, "Can't complete job: not in a running state")
+
+            qiita_plugin = qdb.software.Software.from_name_and_version(
+                'Qiita', 'alpha')
+            cmd = qiita_plugin.get_command('complete_job')
+            params = qdb.software.Parameters.load(
+                cmd, values_dict={'job_id': job_id,
+                                  'payload': self.request.body})
+            job = qdb.processing_job.ProcessingJob.create(job.user, params)
+            job.submit()
+
+        self.finish()
+
+
+class ProcessingJobAPItestHandler(OauthBaseHandler):
+    @authenticate_oauth
+    def post(self):
+        user = self.get_argument('user', 'test@foo.bar')
+        s_name, s_version, cmd_name = loads(self.get_argument('command'))
+        params_dict = self.get_argument('parameters')
+        status = self.get_argument('status', None)
+
+        cmd = qdb.software.Software.from_name_and_version(
+            s_name, s_version).get_command(cmd_name)
+
+        params = qdb.software.Parameters.load(cmd, json_str=params_dict)
+
+        job = qdb.processing_job.ProcessingJob.create(
+            qdb.user.User(user), params, True)
+
+        if status:
+            job._set_status(status)
+
+        self.write({'job': job.id})
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed

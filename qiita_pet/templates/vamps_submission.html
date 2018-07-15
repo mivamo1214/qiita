@@ -10,7 +10,7 @@
             and prep templates which will be submitted to VAMPS.
         </div>
 
-        {% if level != 'danger' and maintenance is None  %}
+        {% if level != 'danger' %}
             <table class="table">
             {% for category, summary in stats %}
                 <tr>
@@ -23,8 +23,20 @@
         {% end %}
         </table>
     </div>
+<<<<<<< HEAD
     {% if level != 'danger' and maintenance is None  %}
       <input type="submit" class="btn btn-primary" value="Submit to VAMPS">
+=======
+    The investigation type is: <b>{{investigation_type}}</b>
+    <br/><br/>
+
+    {% if level != 'danger' %}
+      {% if allow_submission %}
+        <input type="submit" class="btn btn-primary" value="Submit to VAMPS">
+      {% else %}
+        <b>{% raw disabled_msg %}
+      {% end %}
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
     {% end %}
     <br/><br/>
     <a class="btn btn-primary" href="/study/description/{{study_id}}?top_tab=preprocessed_data_tab&sub_tab={{preprocessed_data_id}}">Return to study</a>

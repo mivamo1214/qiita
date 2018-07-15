@@ -13,7 +13,15 @@ from datetime import datetime
 from os import close, remove
 from os.path import exists
 
+<<<<<<< HEAD
 from qiita_core.util import qiita_test_checker
+=======
+from tornado.web import HTTPError
+import numpy.testing as npt
+import pandas as pd
+
+from qiita_core.testing import wait_for_processing_job
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 from qiita_db.handlers.tests.oauthbase import OauthTestingBase
 import qiita_db as qdb
 from qiita_db.handlers.processing_job import _get_job
@@ -52,9 +60,15 @@ class JobHandlerTests(OauthTestingBase):
                   "rev_comp_barcode": False,
                   "rev_comp_mapping_barcodes": False, "rev_comp": False,
                   "phred_quality_threshold": 3, "barcode_type": "golay_12",
+<<<<<<< HEAD
                   "max_barcode_errors": 1.5, "input_data": 1}
         exp = {'success': True, 'error': '', 'command': cmd,
                'parameters': params, 'status': 'success'}
+=======
+                  "max_barcode_errors": 1.5, "input_data": 1,
+                  'phred_offset': 'auto'}
+        exp = {'command': cmd, 'parameters': params, 'status': 'success'}
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
         self.assertEqual(loads(obs.body), exp)
 
     def test_get_no_header(self):
@@ -63,8 +77,6 @@ class JobHandlerTests(OauthTestingBase):
 
 
 class HeartbeatHandlerTests(OauthTestingBase):
-    database = True
-
     def test_post_job_does_not_exists(self):
         obs = self.post('/qiita_db/jobs/do-not-exist/heartbeat/', '',
                         headers=self.header)
@@ -76,10 +88,16 @@ class HeartbeatHandlerTests(OauthTestingBase):
         obs = self.post(
             '/qiita_db/jobs/6d368e16-2242-4cf8-87b4-a5dc40bb890b/heartbeat/',
             '', headers=self.header)
+<<<<<<< HEAD
         self.assertEqual(obs.code, 200)
         exp = {'success': False,
                'error': 'Job already finished. Status: success'}
         self.assertEqual(loads(obs.body), exp)
+=======
+        self.assertEqual(obs.code, 403)
+        self.assertEqual(obs.reason,
+                         "Can't execute heartbeat on job: already completed")
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
     def test_post(self):
         before = datetime.now()
@@ -115,8 +133,6 @@ class HeartbeatHandlerTests(OauthTestingBase):
 
 
 class ActiveStepHandlerTests(OauthTestingBase):
-    database = True
-
     def test_post_no_header(self):
         obs = self.post(
             '/qiita_db/jobs/063e553b-327c-4818-ab4a-adfe58e49860/step/', '')
@@ -134,9 +150,15 @@ class ActiveStepHandlerTests(OauthTestingBase):
         obs = self.post(
             '/qiita_db/jobs/063e553b-327c-4818-ab4a-adfe58e49860/step/',
             payload, headers=self.header)
+<<<<<<< HEAD
         self.assertEqual(obs.code, 200)
         exp = {'success': False, 'error': 'Job in a non-running state'}
         self.assertEqual(loads(obs.body), exp)
+=======
+        self.assertEqual(obs.code, 403)
+        self.assertEqual(obs.reason, "Cannot change the step of a job whose "
+                                     "status is not 'running'")
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
     def test_post(self):
         payload = dumps({'step': 'Step 1 of 4: demultiplexing'})
@@ -152,8 +174,6 @@ class ActiveStepHandlerTests(OauthTestingBase):
 
 
 class CompleteHandlerTests(OauthTestingBase):
-    database = True
-
     def setUp(self):
         self._clean_up_files = []
         super(CompleteHandlerTests, self).setUp()
@@ -186,25 +206,59 @@ class CompleteHandlerTests(OauthTestingBase):
         self.assertEqual(loads(obs.body), exp)
 
     def test_post_job_failure(self):
+        pt = npt.assert_warns(
+            qdb.exceptions.QiitaDBWarning,
+            qdb.metadata_template.prep_template.PrepTemplate.create,
+            pd.DataFrame({'new_col': {'1.SKD6.640190': 1}}),
+            qdb.study.Study(1), '16S')
+        job = qdb.processing_job.ProcessingJob.create(
+            qdb.user.User('test@foo.bar'),
+            qdb.software.Parameters.load(
+                qdb.software.Command.get_validator('BIOM'),
+                values_dict={'template': pt.id, 'files':
+                             dumps({'BIOM': ['file']}),
+                             'artifact_type': 'BIOM'}))
+        job._set_status('running')
+
         payload = dumps({'success': False, 'error': 'Job failure'})
         obs = self.post(
-            '/qiita_db/jobs/bcc7ebcd-39c1-43e4-af2d-822e3589f14d/complete/',
+            '/qiita_db/jobs/%s/complete/' % job.id,
             payload, headers=self.header)
         self.assertEqual(obs.code, 200)
+<<<<<<< HEAD
         exp = {'success': True, 'error': ''}
         self.assertEqual(loads(obs.body), exp)
         job = qdb.processing_job.ProcessingJob(
             'bcc7ebcd-39c1-43e4-af2d-822e3589f14d')
+=======
+        wait_for_processing_job(job.id)
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
         self.assertEqual(job.status, 'error')
         self.assertEqual(job.log,
                          qdb.logger.LogEntry.newest_records(numrecords=1)[0])
         self.assertEqual(job.log.msg, 'Job failure')
 
     def test_post_job_success(self):
+        pt = npt.assert_warns(
+            qdb.exceptions.QiitaDBWarning,
+            qdb.metadata_template.prep_template.PrepTemplate.create,
+            pd.DataFrame({'new_col': {'1.SKD6.640190': 1}}),
+            qdb.study.Study(1), '16S')
+        job = qdb.processing_job.ProcessingJob.create(
+            qdb.user.User('test@foo.bar'),
+            qdb.software.Parameters.load(
+                qdb.software.Command.get_validator('BIOM'),
+                values_dict={'template': pt.id, 'files':
+                             dumps({'BIOM': ['file']}),
+                             'artifact_type': 'BIOM'}))
+        job._set_status('running')
+
         fd, fp = mkstemp(suffix='_table.biom')
         close(fd)
         with open(fp, 'w') as f:
             f.write('\n')
+
+        self._clean_up_files.append(fp)
 
         exp_artifact_count = qdb.util.get_count('qiita.artifact') + 1
         payload = dumps(
@@ -216,16 +270,103 @@ class CompleteHandlerTests(OauthTestingBase):
                   'can_be_submitted_to_vamps': False}
              ]})
         obs = self.post(
-            '/qiita_db/jobs/bcc7ebcd-39c1-43e4-af2d-822e3589f14d/complete/',
+            '/qiita_db/jobs/%s/complete/' % job.id,
             payload, headers=self.header)
+        wait_for_processing_job(job.id)
         self.assertEqual(obs.code, 200)
+<<<<<<< HEAD
         exp = {'success': True, 'error': ''}
         self.assertEqual(loads(obs.body), exp)
         job = qdb.processing_job.ProcessingJob(
             'bcc7ebcd-39c1-43e4-af2d-822e3589f14d')
+=======
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
         self.assertEqual(job.status, 'success')
         self.assertEqual(qdb.util.get_count('qiita.artifact'),
                          exp_artifact_count)
+
+    def test_post_job_success_with_archive(self):
+        pt = npt.assert_warns(
+            qdb.exceptions.QiitaDBWarning,
+            qdb.metadata_template.prep_template.PrepTemplate.create,
+            pd.DataFrame({'new_col': {'1.SKD6.640190': 1}}),
+            qdb.study.Study(1), '16S')
+        job = qdb.processing_job.ProcessingJob.create(
+            qdb.user.User('test@foo.bar'),
+            qdb.software.Parameters.load(
+                qdb.software.Command.get_validator('BIOM'),
+                values_dict={'template': pt.id, 'files':
+                             dumps({'BIOM': ['file']}),
+                             'artifact_type': 'BIOM'}))
+        job._set_status('running')
+
+        fd, fp = mkstemp(suffix='_table.biom')
+        close(fd)
+        with open(fp, 'w') as f:
+            f.write('\n')
+
+        self._clean_up_files.append(fp)
+
+        payload = dumps(
+            {'success': True, 'error': '',
+             'artifacts': {'OTU table': {'filepaths': [(fp, 'biom')],
+                                         'artifact_type': 'BIOM'}},
+             'archive': {'AAAA': 'AAA', 'CCC': 'CCC'}})
+
+        obs = self.post(
+            '/qiita_db/jobs/%s/complete/' % job.id,
+            payload, headers=self.header)
+        wait_for_processing_job(job.id)
+        self.assertEqual(obs.code, 200)
+
+
+class ProcessingJobAPItestHandlerTests(OauthTestingBase):
+    def test_post_processing_job(self):
+        data = {
+            'user': 'demo@microbio.me',
+            'command': dumps(['QIIME', '1.9.1', 'Pick closed-reference OTUs']),
+            'parameters': dumps({"reference": 1,
+                                 "sortmerna_e_value": 1,
+                                 "sortmerna_max_pos": 10000,
+                                 "similarity": 0.97,
+                                 "sortmerna_coverage": 0.97,
+                                 "threads": 1,
+                                 "input_data": 1})
+            }
+
+        obs = self.post('/apitest/processing_job/', headers=self.header,
+                        data=data)
+        self.assertEqual(obs.code, 200)
+
+        obs = loads(obs.body)
+        self.assertEqual(obs.keys(), ['job'])
+        self.assertIsNotNone(obs['job'])
+
+    def test_post_processing_job_status(self):
+        data = {
+            'user': 'demo@microbio.me',
+            'command': dumps(['QIIME', '1.9.1', 'Pick closed-reference OTUs']),
+            'status': 'running',
+            'parameters': dumps({"reference": 1,
+                                 "sortmerna_e_value": 1,
+                                 "sortmerna_max_pos": 10000,
+                                 "similarity": 0.97,
+                                 "sortmerna_coverage": 0.97,
+                                 "threads": 1,
+                                 "input_data": 1})
+            }
+
+        obs = self.post('/apitest/processing_job/', headers=self.header,
+                        data=data)
+        self.assertEqual(obs.code, 200)
+
+        obs = loads(obs.body)
+        self.assertEqual(obs.keys(), ['job'])
+        job_id = obs['job']
+        self.assertTrue(qdb.processing_job.ProcessingJob.exists(job_id))
+        self.assertEqual(qdb.processing_job.ProcessingJob(job_id).status,
+                         'running')
+
 
 if __name__ == '__main__':
     main()

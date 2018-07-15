@@ -8,12 +8,12 @@
 
 from future.builtins import zip
 from unittest import TestCase, main
-from datetime import datetime
 from tempfile import mkstemp
 from os import close, remove
 from collections import Iterable
+from warnings import catch_warnings
+from time import time
 
-import numpy as np
 import numpy.testing as npt
 import pandas as pd
 from pandas.util.testing import assert_frame_equal
@@ -23,7 +23,8 @@ from qiita_core.exceptions import IncompetentQiitaDeveloperError
 import qiita_db as qdb
 
 
-class BaseTestSample(TestCase):
+@qiita_test_checker()
+class TestSample(TestCase):
     def setUp(self):
         self.sample_template = \
             qdb.metadata_template.sample_template.SampleTemplate(1)
@@ -44,8 +45,6 @@ class BaseTestSample(TestCase):
                                'env_feature', 'latitude', 'longitude',
                                'scientific_name'}
 
-
-class TestSampleReadOnly(BaseTestSample):
     def test_init_unknown_error(self):
         """Init raises an error if the sample id is not found in the template
         """
@@ -114,14 +113,14 @@ class TestSampleReadOnly(BaseTestSample):
         """
         self.assertEqual(self.tester['physical_specimen_location'], 'ANL')
         self.assertEqual(self.tester['collection_timestamp'],
-                         datetime(2011, 11, 11, 13, 00, 00))
+                         '2011-11-11 13:00:00')
         self.assertTrue(self.tester['dna_extracted'])
 
     def test_getitem_dynamic(self):
         """Get item returns the correct metadata value from the dynamic table
         """
         self.assertEqual(self.tester['SEASON_ENVIRONMENT'], 'winter')
-        self.assertEqual(self.tester['depth'], 0.15)
+        self.assertEqual(self.tester['depth'], '0.15')
 
     def test_getitem_error(self):
         """Get item raises an error if category does not exists"""
@@ -153,15 +152,14 @@ class TestSampleReadOnly(BaseTestSample):
         """values returns an iterator over the values"""
         obs = self.tester.values()
         self.assertTrue(isinstance(obs, Iterable))
-        exp = {'ANL', True, True, 'ENVO:soil',
-               datetime(2011, 11, 11, 13, 00, 00), '1001:M7',
-               'Cannabis Soil Microbiome', 'winter', 'n',
-               '64.6 sand, 17.6 silt, 17.8 clay', '1118232', 0.15, '3483',
-               'root metagenome', 0.164, 114, 15, 1.41, 7.15, 0,
+        exp = {'ANL', 'true', 'true', 'ENVO:soil', '2011-11-11 13:00:00',
+               '1001:M7', 'Cannabis Soil Microbiome', 'winter', 'n',
+               '64.6 sand, 17.6 silt, 17.8 clay', '1118232', '0.15', '3483',
+               'root metagenome', '0.164', '114', '15', '1.41', '7.15', '0',
                'ENVO:Temperate grasslands, savannas, and shrubland biome',
-               'GAZ:United States of America', 6.94, 'SKB8', 5,
-               'Burmese root', 'ENVO:plant-associated habitat', 74.0894932572,
-               65.3283470202, '1118232'}
+               'GAZ:United States of America', '6.94', 'SKB8', '5',
+               'Burmese root', 'ENVO:plant-associated habitat',
+               '74.0894932572', '65.3283470202', '1118232'}
         self.assertItemsEqual(set(obs), exp)
 
     def test_items(self):
@@ -169,33 +167,34 @@ class TestSampleReadOnly(BaseTestSample):
         obs = self.tester.items()
         self.assertTrue(isinstance(obs, Iterable))
         exp = {('physical_specimen_location', 'ANL'),
-               ('physical_specimen_remaining', True),
-               ('dna_extracted', True),
+               ('physical_specimen_remaining', 'true'),
+               ('dna_extracted', 'true'),
                ('sample_type', 'ENVO:soil'),
-               ('collection_timestamp', datetime(2011, 11, 11, 13, 00, 00)),
+               ('collection_timestamp', '2011-11-11 13:00:00'),
                ('host_subject_id', '1001:M7'),
                ('description', 'Cannabis Soil Microbiome'),
                ('season_environment', 'winter'), ('assigned_from_geo', 'n'),
                ('texture', '64.6 sand, 17.6 silt, 17.8 clay'),
-               ('taxon_id', '1118232'), ('depth', 0.15),
+               ('taxon_id', '1118232'), ('depth', '0.15'),
                ('host_taxid', '3483'), ('common_name', 'root metagenome'),
-               ('water_content_soil', 0.164), ('elevation', 114), ('temp', 15),
-               ('tot_nitro', 1.41), ('samp_salinity', 7.15), ('altitude', 0),
+               ('water_content_soil', '0.164'), ('elevation', '114'),
+               ('temp', '15'), ('tot_nitro', '1.41'),
+               ('samp_salinity', '7.15'), ('altitude', '0'),
                ('env_biome',
                 'ENVO:Temperate grasslands, savannas, and shrubland biome'),
-               ('country', 'GAZ:United States of America'), ('ph', 6.94),
-               ('anonymized_name', 'SKB8'), ('tot_org_carb', 5),
+               ('country', 'GAZ:United States of America'), ('ph', '6.94'),
+               ('anonymized_name', 'SKB8'), ('tot_org_carb', '5'),
                ('description_duplicate', 'Burmese root'),
                ('env_feature', 'ENVO:plant-associated habitat'),
-               ('latitude', 74.0894932572),
-               ('longitude', 65.3283470202),
+               ('latitude', '74.0894932572'),
+               ('longitude', '65.3283470202'),
                ('scientific_name', '1118232')}
         self.assertEqual(set(obs), exp)
 
     def test_get(self):
         """get returns the correct sample object"""
         self.assertEqual(self.tester.get('SEASON_ENVIRONMENT'), 'winter')
-        self.assertEqual(self.tester.get('depth'), 0.15)
+        self.assertEqual(self.tester.get('depth'), '0.15')
 
     def test_get_none(self):
         """get returns none if the sample id is not present"""
@@ -217,19 +216,16 @@ class TestSampleReadOnly(BaseTestSample):
         self.assertTrue(obs_bool)
         self.assertEqual(obs_msg, "")
 
-
-@qiita_test_checker()
-class TestSampleReadWrite(BaseTestSample):
     def test_setitem(self):
         with self.assertRaises(qdb.exceptions.QiitaDBColumnError):
             self.tester['column that does not exist'] = 0.30
 
-        with self.assertRaises(ValueError):
-            self.tester['collection_timestamp'] = "Error!"
+        tester = qdb.metadata_template.sample_template.Sample(
+            '1.SKB1.640202', self.sample_template)
 
-        self.assertEqual(self.tester['tot_nitro'], 1.41)
-        self.tester['tot_nitro'] = '1234.5'
-        self.assertEqual(self.tester['tot_nitro'], 1234.5)
+        self.assertEqual(tester['tot_nitro'], '1.41')
+        tester['tot_nitro'] = '1234.5'
+        self.assertEqual(tester['tot_nitro'], '1234.5')
 
     def test_delitem(self):
         """delitem raises an error (currently not allowed)"""
@@ -237,54 +233,65 @@ class TestSampleReadWrite(BaseTestSample):
             del self.tester['DEPTH']
 
 
-class BaseTestSampleTemplate(TestCase):
-    def _set_up(self):
+@qiita_test_checker()
+class TestSampleTemplate(TestCase):
+    def setUp(self):
+        info = {
+            "timeseries_type_id": '1',
+            "metadata_complete": 'true',
+            "mixs_compliant": 'true',
+            "number_samples_collected": 25,
+            "number_samples_promised": 28,
+            "study_alias": "FCM",
+            "study_description": "Microbiome of people who eat nothing but "
+                                 "fried chicken",
+            "study_abstract": "Exploring how a high fat diet changes the "
+                              "gut microbiome",
+            "emp_person_id": qdb.study.StudyPerson(2),
+            "principal_investigator_id": qdb.study.StudyPerson(3),
+            "lab_person_id": qdb.study.StudyPerson(1)
+        }
+        self.new_study = qdb.study.Study.create(
+            qdb.user.User('test@foo.bar'),
+            "Fried Chicken Microbiome %s" % time(), info)
+
         self.metadata_dict = {
             'Sample1': {'physical_specimen_location': 'location1',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': 'type1',
-                        'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        'collection_timestamp': '2014-05-29 12:24:15',
                         'host_subject_id': 'NotIdentified',
                         'Description': 'Test Sample 1',
-                        'str_column': 'Value for sample 1',
-                        'int_column': 1,
-                        'latitude': 42.42,
-                        'longitude': 41.41,
-                        'taxon_id': 9606,
+                        'latitude': '42.42',
+                        'longitude': '41.41',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens'},
             'Sample2': {'physical_specimen_location': 'location1',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': 'type1',
-                        'int_column': 2,
-                        'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        'collection_timestamp': '2014-05-29 12:24:15',
                         'host_subject_id': 'NotIdentified',
                         'Description': 'Test Sample 2',
-                        'str_column': 'Value for sample 2',
-                        'latitude': 4.2,
-                        'longitude': 1.1,
-                        'taxon_id': 9606,
+                        'latitude': '4.2',
+                        'longitude': '1.1',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens'},
             'Sample3': {'physical_specimen_location': 'location1',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': 'type1',
-                        'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        'collection_timestamp': '2014-05-29 12:24:15',
                         'host_subject_id': 'NotIdentified',
                         'Description': 'Test Sample 3',
-                        'str_column': 'Value for sample 3',
-                        'int_column': 3,
-                        'latitude': 4.8,
-                        'longitude': 4.41,
-                        'taxon_id': 9606,
+                        'latitude': '4.8',
+                        'longitude': '4.41',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens'},
             }
         self.metadata = pd.DataFrame.from_dict(self.metadata_dict,
-                                               orient='index')
+                                               orient='index', dtype=str)
 
         metadata_str_prefix_dict = {
             'foo.Sample1': self.metadata_dict['Sample1'],
@@ -292,7 +299,7 @@ class BaseTestSampleTemplate(TestCase):
             'foo.Sample3': self.metadata_dict['Sample3'],
         }
         self.metadata_str_prefix = pd.DataFrame.from_dict(
-            metadata_str_prefix_dict, orient='index')
+            metadata_str_prefix_dict, orient='index', dtype=str)
 
         metadata_int_prefix_dict = {
             '12.Sample1': self.metadata_dict['Sample1'],
@@ -300,15 +307,15 @@ class BaseTestSampleTemplate(TestCase):
             '12.Sample3': self.metadata_dict['Sample3']
         }
         self.metadata_int_pref = pd.DataFrame.from_dict(
-            metadata_int_prefix_dict, orient='index')
+            metadata_int_prefix_dict, orient='index', dtype=str)
 
         metadata_prefixed_dict = {
-            '2.Sample1': self.metadata_dict['Sample1'],
-            '2.Sample2': self.metadata_dict['Sample2'],
-            '2.Sample3': self.metadata_dict['Sample3']
+            '%d.Sample1' % self.new_study.id: self.metadata_dict['Sample1'],
+            '%d.Sample2' % self.new_study.id: self.metadata_dict['Sample2'],
+            '%d.Sample3' % self.new_study.id: self.metadata_dict['Sample3']
         }
         self.metadata_prefixed = pd.DataFrame.from_dict(
-            metadata_prefixed_dict, orient='index')
+            metadata_prefixed_dict, orient='index', dtype=str)
 
         self.test_study = qdb.study.Study(1)
         self.tester = qdb.metadata_template.sample_template.SampleTemplate(1)
@@ -324,183 +331,158 @@ class BaseTestSampleTemplate(TestCase):
 
         self.metadata_dict_updated_dict = {
             'Sample1': {'physical_specimen_location': 'location1',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': '6',
                         'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        '2014-05-29 12:24:15',
                         'host_subject_id': 'NotIdentified',
                         'Description': 'Test Sample 1',
-                        'str_column': 'Value for sample 1',
-                        'int_column': 1,
-                        'latitude': 42.42,
-                        'longitude': 41.41,
-                        'taxon_id': 9606,
+                        'latitude': '42.42',
+                        'longitude': '41.41',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens'},
             'Sample2': {'physical_specimen_location': 'location1',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': '5',
                         'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        '2014-05-29 12:24:15',
                         'host_subject_id': 'the only one',
                         'Description': 'Test Sample 2',
-                        'str_column': 'Value for sample 2',
-                        'int_column': 2,
-                        'latitude': 4.2,
-                        'longitude': 1.1,
-                        'taxon_id': 9606,
+                        'latitude': '4.2',
+                        'longitude': '1.1',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens'},
             'Sample3': {'physical_specimen_location': 'new location',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': '10',
                         'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        '2014-05-29 12:24:15',
                         'host_subject_id': 'NotIdentified',
                         'Description': 'Test Sample 3',
-                        'str_column': 'Value for sample 3',
-                        'int_column': 3,
-                        'latitude': 4.8,
-                        'longitude': 4.41,
-                        'taxon_id': 9606,
+                        'latitude': '4.8',
+                        'longitude': '4.41',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens'},
             }
         self.metadata_dict_updated = pd.DataFrame.from_dict(
-            self.metadata_dict_updated_dict, orient='index')
+            self.metadata_dict_updated_dict, orient='index', dtype=str)
 
         metadata_dict_updated_sample_error = {
             'Sample1': {'physical_specimen_location': 'location1',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': '6',
                         'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        '2014-05-29 12:24:15',
                         'host_subject_id': 'NotIdentified',
                         'Description': 'Test Sample 1',
-                        'str_column': 'Value for sample 1',
-                        'int_column': 1,
-                        'latitude': 42.42,
-                        'longitude': 41.41,
-                        'taxon_id': 9606,
+                        'latitude': '42.42',
+                        'longitude': '41.41',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens'},
             'Sample2': {'physical_specimen_location': 'location1',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': '5',
                         'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        '2014-05-29 12:24:15',
                         'host_subject_id': 'the only one',
                         'Description': 'Test Sample 2',
-                        'str_column': 'Value for sample 2',
-                        'int_column': 2,
-                        'latitude': 4.2,
-                        'longitude': 1.1,
-                        'taxon_id': 9606,
+                        'latitude': '4.2',
+                        'longitude': '1.1',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens'},
             'Sample3': {'physical_specimen_location': 'new location',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': '10',
                         'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        '2014-05-29 12:24:15',
                         'host_subject_id': 'NotIdentified',
                         'Description': 'Test Sample 3',
-                        'str_column': 'Value for sample 3',
-                        'int_column': 3,
-                        'latitude': 4.8,
-                        'longitude': 4.41,
-                        'taxon_id': 9606,
+                        'latitude': '4.8',
+                        'longitude': '4.41',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens'},
             'Sample4': {'physical_specimen_location': 'new location',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': '10',
                         'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        '2014-05-29 12:24:15',
                         'host_subject_id': 'NotIdentified',
                         'Description': 'Test Sample 4',
-                        'str_column': 'Value for sample 4',
-                        'int_column': 4,
-                        'latitude': 4.8,
-                        'longitude': 4.41,
-                        'taxon_id': 9606,
+                        'latitude': '4.8',
+                        'longitude': '4.41',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens'}
             }
         self.metadata_dict_updated_sample_error = pd.DataFrame.from_dict(
-            metadata_dict_updated_sample_error, orient='index')
+            metadata_dict_updated_sample_error, orient='index', dtype=str)
 
         metadata_dict_updated_column_error = {
             'Sample1': {'physical_specimen_location': 'location1',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': '6',
                         'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        '2014-05-29 12:24:15',
                         'host_subject_id': 'NotIdentified',
                         'Description': 'Test Sample 1',
-                        'str_column': 'Value for sample 1',
-                        'int_column': 1,
-                        'latitude': 42.42,
-                        'longitude': 41.41,
-                        'taxon_id': 9606,
+                        'latitude': '42.42',
+                        'longitude': '41.41',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens',
                         'extra_col': True},
             'Sample2': {'physical_specimen_location': 'location1',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': '5',
                         'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        '2014-05-29 12:24:15',
                         'host_subject_id': 'the only one',
                         'Description': 'Test Sample 2',
-                        'str_column': 'Value for sample 2',
-                        'int_column': 2,
-                        'latitude': 4.2,
-                        'longitude': 1.1,
-                        'taxon_id': 9606,
+                        'latitude': '4.2',
+                        'longitude': '1.1',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens',
                         'extra_col': True},
             'Sample3': {'physical_specimen_location': 'new location',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': '10',
                         'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        '2014-05-29 12:24:15',
                         'host_subject_id': 'NotIdentified',
                         'Description': 'Test Sample 3',
-                        'str_column': 'Value for sample 3',
-                        'int_column': 3,
-                        'latitude': 4.8,
-                        'longitude': 4.41,
-                        'taxon_id': 9606,
+                        'latitude': '4.8',
+                        'longitude': '4.41',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens',
                         'extra_col': True},
             }
         self.metadata_dict_updated_column_error = pd.DataFrame.from_dict(
-            metadata_dict_updated_column_error, orient='index')
+            metadata_dict_updated_column_error, orient='index', dtype=str)
 
     def tearDown(self):
         for f in self._clean_up_files:
             remove(f)
 
-
-class TestSampleTemplateReadOnly(BaseTestSampleTemplate):
-    def setUp(self):
-        self._set_up()
-
     def test_metadata_headers(self):
         ST = qdb.metadata_template.sample_template.SampleTemplate
         obs = ST.metadata_headers()
-        exp = ['physical_specimen_location', 'physical_specimen_remaining',
-               'dna_extracted', 'sample_type', 'collection_timestamp',
-               'host_subject_id', 'description', 'season_environment',
-               'assigned_from_geo', 'texture', 'taxon_id', 'depth',
-               'host_taxid', 'common_name', 'water_content_soil', 'elevation',
-               'temp', 'tot_nitro', 'samp_salinity', 'altitude', 'env_biome',
-               'country', 'ph', 'anonymized_name', 'tot_org_carb',
-               'description_duplicate', 'env_feature', 'latitude', 'longitude',
-               'sample_id', 'scientific_name']
+        exp = ['altitude', 'anonymized_name', 'assigned_from_geo',
+               'collection_timestamp', 'common_name', 'country', 'depth',
+               'description', 'description_duplicate', 'dna_extracted',
+               'elevation', 'env_biome', 'env_feature', 'host_subject_id',
+               'host_taxid', 'latitude', 'longitude', 'ph',
+               'physical_specimen_location', 'physical_specimen_remaining',
+               'samp_salinity', 'sample_id', 'sample_type', 'scientific_name',
+               'season_environment', 'taxon_id', 'temp', 'texture',
+               'tot_nitro', 'tot_org_carb', 'water_content_soil']
         self.assertItemsEqual(obs, exp)
 
     def test_study_id(self):
@@ -510,7 +492,7 @@ class TestSampleTemplateReadOnly(BaseTestSampleTemplate):
     def test_init_unknown_error(self):
         """Init raises an error if the id is not known"""
         with self.assertRaises(qdb.exceptions.QiitaDBUnknownIDError):
-            qdb.metadata_template.sample_template.SampleTemplate(2)
+            qdb.metadata_template.sample_template.SampleTemplate(200000)
 
     def test_init(self):
         """Init successfully instantiates the object"""
@@ -729,94 +711,52 @@ class TestSampleTemplateReadOnly(BaseTestSampleTemplate):
         self.metadata.index = ['o()xxxx[{::::::::>', 'sample.1', 'sample.3']
         ST = qdb.metadata_template.sample_template.SampleTemplate
         with self.assertRaises(qdb.exceptions.QiitaDBColumnError):
-            ST._clean_validate_template(
-                self.metadata, 2,
-                qdb.metadata_template.constants.SAMPLE_TEMPLATE_COLUMNS)
+            ST._clean_validate_template(self.metadata, 2)
 
     def test_clean_validate_template_error_duplicate_cols(self):
         """Raises an error if there are duplicated columns in the template"""
-        self.metadata['STR_COLUMN'] = pd.Series(['foo', 'bar', 'foobar'],
-                                                index=self.metadata.index)
+        self.metadata['SAMPLE_TYPE'] = pd.Series(['foo', 'bar', 'foobar'],
+                                                 index=self.metadata.index)
 
         ST = qdb.metadata_template.sample_template.SampleTemplate
         with self.assertRaises(qdb.exceptions.QiitaDBDuplicateHeaderError):
-            ST._clean_validate_template(
-                self.metadata, 2,
-                qdb.metadata_template.constants.SAMPLE_TEMPLATE_COLUMNS)
+            ST._clean_validate_template(self.metadata, 2)
 
     def test_clean_validate_template_error_duplicate_samples(self):
         """Raises an error if there are duplicated samples in the template"""
         self.metadata.index = ['sample.1', 'sample.1', 'sample.3']
         ST = qdb.metadata_template.sample_template.SampleTemplate
         with self.assertRaises(qdb.exceptions.QiitaDBDuplicateSamplesError):
-            ST._clean_validate_template(
-                self.metadata, 2,
-                qdb.metadata_template.constants.SAMPLE_TEMPLATE_COLUMNS)
-
-    def test_clean_validate_template_warning_missing(self):
-        """Warns if the template is missing a required column"""
-        metadata_dict = {
-            'Sample1': {'physical_specimen_location': 'location1',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
-                        'sample_type': 'type1',
-                        'host_subject_id': 'NotIdentified',
-                        'Description': 'Test Sample 1',
-                        'latitude': 42.42,
-                        'longitude': 41.41}
-            }
-        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index')
-        ST = qdb.metadata_template.sample_template.SampleTemplate
-        obs = npt.assert_warns(
-            qdb.exceptions.QiitaDBWarning, ST._clean_validate_template,
-            metadata, 2,
-            qdb.metadata_template.constants.SAMPLE_TEMPLATE_COLUMNS)
-        metadata_dict = {
-            '2.Sample1': {'physical_specimen_location': 'location1',
-                          'physical_specimen_remaining': True,
-                          'dna_extracted': True,
-                          'sample_type': 'type1',
-                          'host_subject_id': 'NotIdentified',
-                          'description': 'Test Sample 1',
-                          'latitude': 42.42,
-                          'longitude': 41.41}
-            }
-        exp = pd.DataFrame.from_dict(metadata_dict, orient='index')
-        obs.sort_index(axis=0, inplace=True)
-        obs.sort_index(axis=1, inplace=True)
-        exp.sort_index(axis=0, inplace=True)
-        exp.sort_index(axis=1, inplace=True)
-        assert_frame_equal(obs, exp)
+            ST._clean_validate_template(self.metadata, 2)
 
     def test_clean_validate_template_columns(self):
         metadata_dict = {
             'Sample1': {'physical_specimen_location': 'location1',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': 'type1',
                         'host_subject_id': 'NotIdentified',
                         'Description': 'Test Sample 1',
-                        'latitude': 42.42,
-                        'longitude': 41.41}
+                        'latitude': '42.42',
+                        'longitude': '41.41'}
             }
-        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index')
-        cols = ['collection_timestamp', 'taxon_id', 'scientific_name']
+        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index',
+                                          dtype=str)
         ST = qdb.metadata_template.sample_template.SampleTemplate
         obs = ST._clean_validate_template(
             metadata, 2,
-            qdb.metadata_template.constants.SAMPLE_TEMPLATE_COLUMNS,
-            current_columns=cols)
+            qdb.metadata_template.constants.SAMPLE_TEMPLATE_COLUMNS)
         metadata_dict = {
             '2.Sample1': {'physical_specimen_location': 'location1',
-                          'physical_specimen_remaining': True,
-                          'dna_extracted': True,
+                          'physical_specimen_remaining': 'true',
+                          'dna_extracted': 'true',
                           'sample_type': 'type1',
                           'host_subject_id': 'NotIdentified',
                           'description': 'Test Sample 1',
-                          'latitude': 42.42,
-                          'longitude': 41.41}
+                          'latitude': '42.42',
+                          'longitude': '41.41'}
             }
-        exp = pd.DataFrame.from_dict(metadata_dict, orient='index')
+        exp = pd.DataFrame.from_dict(metadata_dict, orient='index', dtype=str)
         obs.sort_index(axis=0, inplace=True)
         obs.sort_index(axis=1, inplace=True)
         exp.sort_index(axis=0, inplace=True)
@@ -830,55 +770,50 @@ class TestSampleTemplateReadOnly(BaseTestSampleTemplate):
             qdb.metadata_template.constants.SAMPLE_TEMPLATE_COLUMNS)
         metadata_dict = {
             '2.Sample1': {'physical_specimen_location': 'location1',
-                          'physical_specimen_remaining': True,
-                          'dna_extracted': True,
+                          'physical_specimen_remaining': 'true',
+                          'dna_extracted': 'true',
                           'sample_type': 'type1',
                           'collection_timestamp':
-                          datetime(2014, 5, 29, 12, 24, 51),
+                          '2014-05-29 12:24:15',
                           'host_subject_id': 'NotIdentified',
                           'description': 'Test Sample 1',
-                          'str_column': 'Value for sample 1',
-                          'int_column': 1,
-                          'latitude': 42.42,
-                          'longitude': 41.41,
-                          'taxon_id': 9606,
+                          'latitude': '42.42',
+                          'longitude': '41.41',
+                          'taxon_id': '9606',
                           'scientific_name': 'homo sapiens'},
             '2.Sample2': {'physical_specimen_location': 'location1',
-                          'physical_specimen_remaining': True,
-                          'dna_extracted': True,
+                          'physical_specimen_remaining': 'true',
+                          'dna_extracted': 'true',
                           'sample_type': 'type1',
-                          'int_column': 2,
                           'collection_timestamp':
-                          datetime(2014, 5, 29, 12, 24, 51),
+                          '2014-05-29 12:24:15',
                           'host_subject_id': 'NotIdentified',
                           'description': 'Test Sample 2',
-                          'str_column': 'Value for sample 2',
-                          'latitude': 4.2,
-                          'longitude': 1.1,
-                          'taxon_id': 9606,
+                          'latitude': '4.2',
+                          'longitude': '1.1',
+                          'taxon_id': '9606',
                           'scientific_name': 'homo sapiens'},
             '2.Sample3': {'physical_specimen_location': 'location1',
-                          'physical_specimen_remaining': True,
-                          'dna_extracted': True,
+                          'physical_specimen_remaining': 'true',
+                          'dna_extracted': 'true',
                           'sample_type': 'type1',
                           'collection_timestamp':
-                          datetime(2014, 5, 29, 12, 24, 51),
+                          '2014-05-29 12:24:15',
                           'host_subject_id': 'NotIdentified',
                           'description': 'Test Sample 3',
-                          'str_column': 'Value for sample 3',
-                          'int_column': 3,
-                          'latitude': 4.8,
-                          'longitude': 4.41,
-                          'taxon_id': 9606,
+                          'latitude': '4.8',
+                          'longitude': '4.41',
+                          'taxon_id': '9606',
                           'scientific_name': 'homo sapiens'},
             }
-        exp = pd.DataFrame.from_dict(metadata_dict, orient='index')
+        exp = pd.DataFrame.from_dict(metadata_dict, orient='index', dtype=str)
         obs.sort_index(axis=0, inplace=True)
         obs.sort_index(axis=1, inplace=True)
         exp.sort_index(axis=0, inplace=True)
         exp.sort_index(axis=1, inplace=True)
         assert_frame_equal(obs, exp)
 
+<<<<<<< HEAD
 
 @qiita_test_checker()
 class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
@@ -904,6 +839,56 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
         self.new_study = qdb.study.Study.create(
             qdb.user.User('test@foo.bar'), "Fried Chicken Microbiome", [1],
             info)
+=======
+    def test_clean_validate_template_no_pgsql_reserved_words(self):
+        ST = qdb.metadata_template.sample_template.SampleTemplate
+        self.metadata.rename(columns={'taxon_id': 'select'}, inplace=True)
+        with self.assertRaises(qdb.exceptions.QiitaDBColumnError):
+            ST._clean_validate_template(self.metadata, 2)
+
+    def test_clean_validate_template_no_invalid_chars(self):
+        ST = qdb.metadata_template.sample_template.SampleTemplate
+        self.metadata.rename(columns={'taxon_id': 'taxon id'}, inplace=True)
+        with self.assertRaises(qdb.exceptions.QiitaDBColumnError):
+            ST._clean_validate_template(self.metadata, 2)
+
+    def test_get_category(self):
+        pt = qdb.metadata_template.sample_template.SampleTemplate(1)
+        obs = pt.get_category('latitude')
+        exp = {'1.SKB2.640194': '35.2374368957',
+               '1.SKM4.640180': 'Not applicable',
+               '1.SKB3.640195': '95.2060749748',
+               '1.SKB6.640176': '78.3634273709',
+               '1.SKD6.640190': '29.1499460692',
+               '1.SKM6.640187': '0.291867635913',
+               '1.SKD9.640182': '23.1218032799',
+               '1.SKM8.640201': '3.21190859967',
+               '1.SKM2.640199': '82.8302905615',
+               '1.SKD2.640178': '53.5050692395',
+               '1.SKB7.640196': '13.089194595',
+               '1.SKD4.640185': '40.8623799474',
+               '1.SKB8.640193': '74.0894932572',
+               '1.SKM3.640197': 'Not applicable',
+               '1.SKD5.640186': '85.4121476399',
+               '1.SKB1.640202': '4.59216095574',
+               '1.SKM1.640183': '38.2627021402',
+               '1.SKD1.640179': '68.0991287718',
+               '1.SKD3.640198': '84.0030227585',
+               '1.SKB5.640181': '10.6655599093',
+               '1.SKB4.640189': '43.9614715197',
+               '1.SKB9.640200': '12.6245524972',
+               '1.SKM9.640192': '12.7065957714',
+               '1.SKD8.640184': '57.571893782',
+               '1.SKM5.640177': '44.9725384282',
+               '1.SKM7.640188': '60.1102854322',
+               '1.SKD7.640191': '68.51099627'}
+        self.assertEqual(obs, exp)
+
+    def test_get_category_no_exists(self):
+        pt = qdb.metadata_template.sample_template.SampleTemplate(1)
+        with self.assertRaises(qdb.exceptions.QiitaDBColumnError):
+            pt.get_category('DOESNOTEXIST')
+>>>>>>> 405cbef0c9f71c620da95a0c1ba6c7d3d588b3ed
 
     def test_create_duplicate(self):
         """Create raises an error when creating a duplicated SampleTemplate"""
@@ -913,8 +898,8 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
 
     def test_create_duplicate_header(self):
         """Create raises an error when duplicate headers are present"""
-        self.metadata['STR_COLUMN'] = pd.Series(['', '', ''],
-                                                index=self.metadata.index)
+        self.metadata['SAMPLE_TYPE'] = pd.Series(['', '', ''],
+                                                 index=self.metadata.index)
         with self.assertRaises(qdb.exceptions.QiitaDBDuplicateHeaderError):
             qdb.metadata_template.sample_template.SampleTemplate.create(
                 self.metadata, self.new_study)
@@ -926,44 +911,6 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
         with self.assertRaises(qdb.exceptions.QiitaDBColumnError):
             qdb.metadata_template.sample_template.SampleTemplate.create(
                 self.metadata, self.new_study)
-
-    def test_create_error_cleanup(self):
-        """Create does not modify the database if an error happens"""
-        metadata_dict = {
-            'Sample1': {'physical_specimen_location': 'location1',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
-                        'sample_type': 'type1',
-                        'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
-                        'host_subject_id': 'NotIdentified',
-                        'Description': 'Test Sample 1',
-                        'group': 'Forcing the creation to fail',
-                        'latitude': 42.42,
-                        'longitude': 41.41,
-                        'taxon_id': 9606,
-                        'scientific_name': 'homo sapiens'}
-            }
-        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index')
-        with self.assertRaises(ValueError):
-            qdb.metadata_template.sample_template.SampleTemplate.create(
-                metadata, self.new_study)
-
-        sql = """SELECT EXISTS(
-                    SELECT * FROM qiita.study_sample
-                    WHERE sample_id=%s)"""
-        sample_id = "%d.Sample1" % self.new_study.id
-        self.assertFalse(
-            self.conn_handler.execute_fetchone(sql, (sample_id,))[0])
-
-        sql = """SELECT EXISTS(
-                    SELECT * FROM qiita.study_sample_columns
-                    WHERE study_id=%s)"""
-        self.assertFalse(
-            self.conn_handler.execute_fetchone(sql, (self.new_study.id,))[0])
-
-        self.assertFalse(
-            qdb.util.exists_table("sample_%d" % self.new_study.id))
 
     def test_create(self):
         """Creates a new SampleTemplate"""
@@ -981,54 +928,47 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
         self.assertEqual(st._get_sample_ids(), exp_sample_ids)
         self.assertEqual(len(st), 3)
         exp_categories = {'collection_timestamp', 'description',
-                          'dna_extracted', 'host_subject_id', 'int_column',
-                          'latitude', 'longitude',
-                          'physical_specimen_location',
+                          'dna_extracted', 'host_subject_id', 'latitude',
+                          'longitude', 'physical_specimen_location',
                           'physical_specimen_remaining', 'sample_type',
-                          'scientific_name', 'str_column', 'taxon_id'}
+                          'scientific_name', 'taxon_id'}
         self.assertItemsEqual(st.categories(), exp_categories)
         exp_dict = {
             "%s.Sample1" % new_id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 1",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 1,
-                'latitude': 42.42,
-                'longitude': 41.41,
+                'latitude': '42.42',
+                'longitude': '41.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 1",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             "%s.Sample2" % new_id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 2",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 2,
-                'latitude': 4.2,
-                'longitude': 1.1,
+                'latitude': '4.2',
+                'longitude': '1.1',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 2",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             "%s.Sample3" % new_id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 3",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 3,
-                'latitude': 4.8,
-                'longitude': 4.41,
+                'latitude': '4.8',
+                'longitude': '4.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 3",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'}}
         for s_id in exp_sample_ids:
             self.assertEqual(st[s_id]._to_dict(), exp_dict[s_id])
@@ -1054,54 +994,47 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
         self.assertEqual(st._get_sample_ids(), exp_sample_ids)
         self.assertEqual(len(st), 3)
         exp_categories = {'collection_timestamp', 'description',
-                          'dna_extracted', 'host_subject_id', 'int_column',
-                          'latitude', 'longitude',
-                          'physical_specimen_location',
+                          'dna_extracted', 'host_subject_id', 'latitude',
+                          'longitude', 'physical_specimen_location',
                           'physical_specimen_remaining', 'sample_type',
-                          'scientific_name', 'str_column', 'taxon_id'}
+                          'scientific_name', 'taxon_id'}
         self.assertItemsEqual(st.categories(), exp_categories)
         exp_dict = {
             "%s.12.Sample1" % new_id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 1",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 1,
-                'latitude': 42.42,
-                'longitude': 41.41,
+                'latitude': '42.42',
+                'longitude': '41.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 1",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             "%s.12.Sample2" % new_id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 2",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 2,
-                'latitude': 4.2,
-                'longitude': 1.1,
+                'latitude': '4.2',
+                'longitude': '1.1',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 2",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             "%s.12.Sample3" % new_id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 3",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 3,
-                'latitude': 4.8,
-                'longitude': 4.41,
+                'latitude': '4.8',
+                'longitude': '4.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 3",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'}}
         for s_id in exp_sample_ids:
             self.assertEqual(st[s_id]._to_dict(), exp_dict[s_id])
@@ -1127,54 +1060,47 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
         self.assertEqual(st._get_sample_ids(), exp_sample_ids)
         self.assertEqual(len(st), 3)
         exp_categories = {'collection_timestamp', 'description',
-                          'dna_extracted', 'host_subject_id', 'int_column',
-                          'latitude', 'longitude',
-                          'physical_specimen_location',
+                          'dna_extracted', 'host_subject_id', 'latitude',
+                          'longitude', 'physical_specimen_location',
                           'physical_specimen_remaining', 'sample_type',
-                          'scientific_name', 'str_column', 'taxon_id'}
+                          'scientific_name', 'taxon_id'}
         self.assertItemsEqual(st.categories(), exp_categories)
         exp_dict = {
             "%s.foo.Sample1" % new_id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 1",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 1,
-                'latitude': 42.42,
-                'longitude': 41.41,
+                'latitude': '42.42',
+                'longitude': '41.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 1",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             "%s.bar.Sample2" % new_id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 2",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 2,
-                'latitude': 4.2,
-                'longitude': 1.1,
+                'latitude': '4.2',
+                'longitude': '1.1',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 2",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             "%s.foo.Sample3" % new_id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 3",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 3,
-                'latitude': 4.8,
-                'longitude': 4.41,
+                'latitude': '4.8',
+                'longitude': '4.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 3",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'}}
         for s_id in exp_sample_ids:
             self.assertEqual(st[s_id]._to_dict(), exp_dict[s_id])
@@ -1186,9 +1112,7 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
 
     def test_create_already_prefixed_samples(self):
         """Creates a new SampleTemplate with the samples already prefixed"""
-        st = npt.assert_warns(
-            qdb.exceptions.QiitaDBWarning,
-            qdb.metadata_template.sample_template.SampleTemplate.create,
+        st = qdb.metadata_template.sample_template.SampleTemplate.create(
             self.metadata_prefixed, self.new_study)
         new_id = self.new_study.id
         # The returned object has the correct id
@@ -1202,54 +1126,47 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
         self.assertEqual(st._get_sample_ids(), exp_sample_ids)
         self.assertEqual(len(st), 3)
         exp_categories = {'collection_timestamp', 'description',
-                          'dna_extracted', 'host_subject_id', 'int_column',
-                          'latitude', 'longitude',
-                          'physical_specimen_location',
+                          'dna_extracted', 'host_subject_id', 'latitude',
+                          'longitude', 'physical_specimen_location',
                           'physical_specimen_remaining', 'sample_type',
-                          'scientific_name', 'str_column', 'taxon_id'}
+                          'scientific_name', 'taxon_id'}
         self.assertItemsEqual(st.categories(), exp_categories)
         exp_dict = {
             "%s.Sample1" % new_id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 1",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 1,
-                'latitude': 42.42,
-                'longitude': 41.41,
+                'latitude': '42.42',
+                'longitude': '41.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 1",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             "%s.Sample2" % new_id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 2",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 2,
-                'latitude': 4.2,
-                'longitude': 1.1,
+                'latitude': '4.2',
+                'longitude': '1.1',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 2",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             "%s.Sample3" % new_id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 3",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 3,
-                'latitude': 4.8,
-                'longitude': 4.41,
+                'latitude': '4.8',
+                'longitude': '4.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 3",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'}}
         for s_id in exp_sample_ids:
             self.assertEqual(st[s_id]._to_dict(), exp_dict[s_id])
@@ -1268,12 +1185,6 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
 
         obs = self.conn_handler.execute_fetchall(
             "SELECT * FROM qiita.study_sample WHERE study_id=%s" % st_id)
-        exp = []
-        self.assertEqual(obs, exp)
-
-        obs = self.conn_handler.execute_fetchall(
-            "SELECT * FROM qiita.study_sample_columns WHERE study_id=%s"
-            % st_id)
         exp = []
         self.assertEqual(obs, exp)
 
@@ -1316,22 +1227,6 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
         self.assertEqual(self.tester['1.SKD6.640190']['country'], "3")
         self.assertEqual(self.tester['1.SKM7.640188']['country'], negtest)
 
-        # testing that if fails when trying to change an int column value
-        # to str
-        st = qdb.metadata_template.sample_template.SampleTemplate.create(
-            self.metadata, self.new_study)
-
-        sql = """SELECT * FROM qiita.sample_2 ORDER BY sample_id"""
-        before = self.conn_handler.execute_fetchall(sql)
-        mapping = {'2.Sample1': 1, '2.Sample2': "no_value"}
-
-        with self.assertRaises(ValueError):
-            st.update_category('int_column', mapping)
-
-        after = self.conn_handler.execute_fetchall(sql)
-
-        self.assertEqual(before, after)
-
     def test_update_equal(self):
         """It doesn't fail with the exact same template"""
         # Create a new sample tempalte
@@ -1355,15 +1250,15 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
 
         # validating values
         exp = self.metadata_dict_updated_dict['Sample1'].values()
-        obs = st.get('2.Sample1').values()
+        obs = st.get('%s.Sample1' % self.new_study.id).values()
         self.assertItemsEqual(obs, exp)
 
         exp = self.metadata_dict_updated_dict['Sample2'].values()
-        obs = st.get('2.Sample2').values()
+        obs = st.get('%s.Sample2' % self.new_study.id).values()
         self.assertItemsEqual(obs, exp)
 
         exp = self.metadata_dict_updated_dict['Sample3'].values()
-        obs = st.get('2.Sample3').values()
+        obs = st.get('%s.Sample3' % self.new_study.id).values()
         self.assertItemsEqual(obs, exp)
 
         # checking errors
@@ -1378,7 +1273,7 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
             self.metadata, self.new_study)
         new_metadata = pd.DataFrame.from_dict(
             {'Sample1': {'physical_specimen_location': 'CHANGE'}},
-            orient='index')
+            orient='index', dtype=str)
         exp = {s_id: st[s_id]._to_dict() for s_id in st}
         s_id = '%d.Sample1' % self.new_study.id
         exp[s_id]['physical_specimen_location'] = 'CHANGE'
@@ -1388,27 +1283,30 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
 
     def test_update_numpy(self):
         """Update values in existing mapping file with numpy values"""
+        ST = qdb.metadata_template.sample_template.SampleTemplate
         metadata_dict = {
-            'Sample1': {'bool_col': np.bool_(True),
-                        'date_col': np.datetime64(datetime(2015, 9, 1))},
-            'Sample2': {'bool_col': np.bool_(False),
-                        'date_col': np.datetime64(datetime(2015, 8, 1))}
+            'Sample1': {'bool_col': 'true',
+                        'date_col': '2015-09-01 00:00:00'},
+            'Sample2': {'bool_col': 'true',
+                        'date_col': '2015-09-01 00:00:00'}
         }
-        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index')
-        st = npt.assert_warns(
-            qdb.exceptions.QiitaDBWarning,
-            qdb.metadata_template.sample_template.SampleTemplate.create,
-            metadata, self.new_study)
-        metadata_dict['Sample2']['date_col'] = np.datetime64(
-            datetime(2015, 9, 1))
-        metadata_dict['Sample1']['bool_col'] = np.bool_(False)
-        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index')
+        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index',
+                                          dtype=str)
+        st = npt.assert_warns(qdb.exceptions.QiitaDBWarning, ST.create,
+                              metadata, self.new_study)
+
+        metadata_dict['Sample2']['date_col'] = '2015-09-01 00:00:00'
+        metadata_dict['Sample1']['bool_col'] = 'false'
+        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index',
+                                          dtype=str)
         npt.assert_warns(qdb.exceptions.QiitaDBWarning, st.update, metadata)
 
         sql = "SELECT * FROM qiita.sample_{0}".format(st.id)
         obs = self.conn_handler.execute_fetchall(sql)
-        exp = [['2.Sample1', False, datetime(2015, 9, 1)],
-               ['2.Sample2', False, datetime(2015, 9, 1)]]
+        exp = [['%s.Sample1' % self.new_study.id, 'false',
+                '2015-09-01 00:00:00'],
+               ['%s.Sample2' % self.new_study.id, 'true',
+                '2015-09-01 00:00:00']]
         self.assertEqual(sorted(obs), sorted(exp))
 
     def test_generate_files(self):
@@ -1429,23 +1327,25 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
         self._clean_up_files.append(fp)
         with open(fp, 'U') as f:
             obs = f.read()
-        self.assertEqual(obs, EXP_SAMPLE_TEMPLATE)
+        self.assertEqual(obs, EXP_SAMPLE_TEMPLATE.format(self.new_study.id))
 
         fd, fp = mkstemp()
         close(fd)
-        st.to_file(fp, {'2.Sample1', '2.Sample3'})
+        st.to_file(fp, {'%s.Sample1' % self.new_study.id,
+                        '%s.Sample3' % self.new_study.id})
         self._clean_up_files.append(fp)
 
         with open(fp, 'U') as f:
             obs = f.read()
-        self.assertEqual(obs, EXP_SAMPLE_TEMPLATE_FEWER_SAMPLES)
+        self.assertEqual(
+            obs, EXP_SAMPLE_TEMPLATE_FEWER_SAMPLES.format(self.new_study.id))
 
     def test_get_filepath(self):
         # we will check that there is a new id only because the path will
         # change based on time and the same functionality is being tested
         # in data.py
         exp_id = self.conn_handler.execute_fetchone(
-            "SELECT count(1) FROM qiita.filepath")[0] + 1
+            "SELECT last_value FROM qiita.filepath_filepath_id_seq")[0] + 1
         st = qdb.metadata_template.sample_template.SampleTemplate.create(
             self.metadata, self.new_study)
         self.assertEqual(st.get_filepaths()[0][0], exp_id)
@@ -1465,34 +1365,28 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
 
         md_dict = {
             'Sample4': {'physical_specimen_location': 'location1',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': 'type1',
-                        'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        'collection_timestamp': '2014-05-29 12:24:15',
                         'host_subject_id': 'NotIdentified',
                         'Description': 'Test Sample 4',
-                        'str_column': 'Value for sample 4',
-                        'int_column': 4,
-                        'latitude': 42.42,
-                        'longitude': 41.41,
-                        'taxon_id': 9606,
+                        'latitude': '42.42',
+                        'longitude': '41.41',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens'},
             'Sample5': {'physical_specimen_location': 'location1',
-                        'physical_specimen_remaining': True,
-                        'dna_extracted': True,
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
                         'sample_type': 'type1',
-                        'collection_timestamp':
-                        datetime(2014, 5, 29, 12, 24, 51),
+                        'collection_timestamp': '2014-05-29 12:24:15',
                         'host_subject_id': 'NotIdentified',
                         'Description': 'Test Sample 5',
-                        'str_column': 'Value for sample 5',
-                        'int_column': 5,
-                        'latitude': 42.42,
-                        'longitude': 41.41,
-                        'taxon_id': 9606,
+                        'latitude': '42.42',
+                        'longitude': '41.41',
+                        'taxon_id': '9606',
                         'scientific_name': 'homo sapiens'}}
-        md_ext = pd.DataFrame.from_dict(md_dict, orient='index')
+        md_ext = pd.DataFrame.from_dict(md_dict, orient='index', dtype=str)
 
         npt.assert_warns(qdb.exceptions.QiitaDBWarning, st.extend, md_ext)
 
@@ -1503,82 +1397,71 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
         self.assertEqual(st._get_sample_ids(), exp_sample_ids)
         self.assertEqual(len(st), 5)
         exp_categories = {'collection_timestamp', 'description',
-                          'dna_extracted', 'host_subject_id', 'int_column',
-                          'latitude', 'longitude',
-                          'physical_specimen_location',
+                          'dna_extracted', 'host_subject_id', 'latitude',
+                          'longitude', 'physical_specimen_location',
                           'physical_specimen_remaining', 'sample_type',
-                          'scientific_name', 'str_column', 'taxon_id'}
+                          'scientific_name', 'taxon_id'}
         self.assertItemsEqual(st.categories(), exp_categories)
         exp_dict = {
             "%s.Sample1" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 1",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 1,
-                'latitude': 42.42,
-                'longitude': 41.41,
+                'latitude': '42.42',
+                'longitude': '41.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 1",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             "%s.Sample2" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 2",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 2,
-                'latitude': 4.2,
-                'longitude': 1.1,
+                'latitude': '4.2',
+                'longitude': '1.1',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 2",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             "%s.Sample3" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 3",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 3,
-                'latitude': 4.8,
-                'longitude': 4.41,
+                'latitude': '4.8',
+                'longitude': '4.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 3",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             '%s.Sample4' % st.id: {
-                'int_column': 4,
-                'str_column': 'Value for sample 4',
                 'physical_specimen_location': 'location1',
-                'physical_specimen_remaining': True,
-                'dna_extracted': True,
+                'physical_specimen_remaining': 'true',
+                'dna_extracted': 'true',
                 'sample_type': 'type1',
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'host_subject_id': 'NotIdentified',
                 'description': 'Test Sample 4',
-                'latitude': 42.42,
-                'longitude': 41.41,
-                'taxon_id': 9606,
+                'latitude': '42.42',
+                'longitude': '41.41',
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             '%s.Sample5' % st.id: {
-                'int_column': 5,
-                'str_column': 'Value for sample 5',
                 'physical_specimen_location': 'location1',
-                'physical_specimen_remaining': True,
-                'dna_extracted': True,
+                'physical_specimen_remaining': 'true',
+                'dna_extracted': 'true',
                 'sample_type': 'type1',
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'host_subject_id': 'NotIdentified',
                 'description': 'Test Sample 5',
-                'latitude': 42.42,
-                'longitude': 41.41,
-                'taxon_id': 9606,
+                'latitude': '42.42',
+                'longitude': '41.41',
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'}}
         for s_id in exp_sample_ids:
             self.assertEqual(st[s_id]._to_dict(), exp_dict[s_id])
@@ -1591,25 +1474,24 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
 
         self.metadata_dict['Sample4'] = {
             'physical_specimen_location': 'location1',
-            'physical_specimen_remaining': True,
-            'dna_extracted': True,
+            'physical_specimen_remaining': 'true',
+            'dna_extracted': 'true',
             'sample_type': 'type1',
-            'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+            'collection_timestamp': '2014-05-29 12:24:15',
             'host_subject_id': 'NotIdentified',
             'Description': 'Test Sample 4',
-            'str_column': 'Value for sample 4',
-            'int_column': 4,
-            'latitude': 42.42,
-            'longitude': 41.41,
-            'taxon_id': 9606,
+            'latitude': '42.42',
+            'longitude': '41.41',
+            'taxon_id': '9606',
             'scientific_name': 'homo sapiens'}
 
         # Change a couple of values on the existent samples to test that
         # they remain unchanged
         self.metadata_dict['Sample1']['Description'] = 'Changed'
-        self.metadata_dict['Sample2']['str_column'] = 'Changed dynamic'
+        self.metadata_dict['Sample2']['scientific_name'] = 'Changed dynamic'
 
-        md_ext = pd.DataFrame.from_dict(self.metadata_dict, orient='index')
+        md_ext = pd.DataFrame.from_dict(self.metadata_dict, orient='index',
+                                        dtype=str)
         # Make sure adding duplicate samples raises warning
         npt.assert_warns(qdb.exceptions.QiitaDBWarning, st.extend, md_ext)
 
@@ -1620,68 +1502,59 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
         self.assertEqual(st._get_sample_ids(), exp_sample_ids)
         self.assertEqual(len(st), 4)
         exp_categories = {'collection_timestamp', 'description',
-                          'dna_extracted', 'host_subject_id', 'int_column',
-                          'latitude', 'longitude',
-                          'physical_specimen_location',
+                          'dna_extracted', 'host_subject_id', 'latitude',
+                          'longitude', 'physical_specimen_location',
                           'physical_specimen_remaining', 'sample_type',
-                          'scientific_name', 'str_column', 'taxon_id'}
+                          'scientific_name', 'taxon_id'}
         self.assertItemsEqual(st.categories(), exp_categories)
         exp_dict = {
             "%s.Sample1" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 1",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 1,
-                'latitude': 42.42,
-                'longitude': 41.41,
+                'latitude': '42.42',
+                'longitude': '41.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 1",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             "%s.Sample2" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 2",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 2,
-                'latitude': 4.2,
-                'longitude': 1.1,
+                'latitude': '4.2',
+                'longitude': '1.1',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 2",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             "%s.Sample3" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 3",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 3,
-                'latitude': 4.8,
-                'longitude': 4.41,
+                'latitude': '4.8',
+                'longitude': '4.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 3",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'},
             '%s.Sample4' % st.id: {
-                'int_column': 4,
-                'str_column': 'Value for sample 4',
                 'physical_specimen_location': 'location1',
-                'physical_specimen_remaining': True,
-                'dna_extracted': True,
+                'physical_specimen_remaining': 'true',
+                'dna_extracted': 'true',
                 'sample_type': 'type1',
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'host_subject_id': 'NotIdentified',
                 'description': 'Test Sample 4',
-                'latitude': 42.42,
-                'longitude': 41.41,
-                'taxon_id': 9606,
+                'latitude': '42.42',
+                'longitude': '41.41',
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens'}}
         for s_id in exp_sample_ids:
             self.assertEqual(st[s_id]._to_dict(), exp_dict[s_id])
@@ -1691,14 +1564,14 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
         st = qdb.metadata_template.sample_template.SampleTemplate.create(
             self.metadata, self.new_study)
 
-        self.metadata['NEWCOL'] = pd.Series(['val1', 'val2', 'val3'],
-                                            index=self.metadata.index)
-        self.metadata['NEW_COL'] = pd.Series(['val_1', 'val_2', 'val_3'],
+        self.metadata['texture'] = pd.Series(['val1', 'val2', 'val3'],
                                              index=self.metadata.index)
+        self.metadata['TOT_NITRO'] = pd.Series(['val_1', 'val_2', 'val_3'],
+                                               index=self.metadata.index)
 
         # Change some values to make sure that they do not change on extend
         self.metadata_dict['Sample1']['Description'] = 'Changed'
-        self.metadata_dict['Sample2']['str_column'] = 'Changed dynamic'
+        self.metadata_dict['Sample2']['scientific_name'] = 'Changed dynamic'
 
         # Make sure it raises a warning indicating that the new columns will
         # be added for the existing samples
@@ -1710,62 +1583,55 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
         self.assertEqual(st._get_sample_ids(), exp_sample_ids)
         self.assertEqual(len(st), 3)
         exp_categories = {'collection_timestamp', 'description',
-                          'dna_extracted', 'host_subject_id', 'int_column',
-                          'latitude', 'longitude',
-                          'physical_specimen_location',
+                          'dna_extracted', 'host_subject_id', 'latitude',
+                          'longitude', 'physical_specimen_location',
                           'physical_specimen_remaining', 'sample_type',
-                          'scientific_name', 'str_column', 'taxon_id',
-                          'newcol', 'new_col'}
+                          'scientific_name', 'taxon_id',
+                          'texture', 'tot_nitro'}
         self.assertItemsEqual(st.categories(), exp_categories)
         exp_dict = {
             "%s.Sample1" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 1",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 1,
-                'latitude': 42.42,
-                'longitude': 41.41,
+                'latitude': '42.42',
+                'longitude': '41.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 1",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens',
-                'newcol': 'val1',
-                'new_col': 'val_1'},
+                'texture': 'val1',
+                'tot_nitro': 'val_1'},
             "%s.Sample2" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 2",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 2,
-                'latitude': 4.2,
-                'longitude': 1.1,
+                'latitude': '4.2',
+                'longitude': '1.1',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 2",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens',
-                'newcol': 'val2',
-                'new_col': 'val_2'},
+                'texture': 'val2',
+                'tot_nitro': 'val_2'},
             "%s.Sample3" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 3",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 3,
-                'latitude': 4.8,
-                'longitude': 4.41,
+                'latitude': '4.8',
+                'longitude': '4.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 3",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens',
-                'newcol': 'val3',
-                'new_col': 'val_3'}}
+                'texture': 'val3',
+                'tot_nitro': 'val_3'}}
         for s_id in exp_sample_ids:
             self.assertEqual(st[s_id]._to_dict(), exp_dict[s_id])
 
@@ -1776,28 +1642,27 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
 
         self.metadata_dict['Sample4'] = {
             'physical_specimen_location': 'location1',
-            'physical_specimen_remaining': True,
-            'dna_extracted': True,
+            'physical_specimen_remaining': 'true',
+            'dna_extracted': 'true',
             'sample_type': 'type1',
-            'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+            'collection_timestamp': '2014-05-29 12:24:15',
             'host_subject_id': 'NotIdentified',
             'Description': 'Test Sample 4',
-            'str_column': 'Value for sample 4',
-            'int_column': 4,
-            'latitude': 42.42,
-            'longitude': 41.41,
-            'taxon_id': 9606,
+            'latitude': '42.42',
+            'longitude': '41.41',
+            'taxon_id': '9606',
             'scientific_name': 'homo sapiens'}
 
         # Change a couple of values on the existent samples to test that
         # they remain unchanged
         self.metadata_dict['Sample1']['Description'] = 'Changed'
-        self.metadata_dict['Sample2']['str_column'] = 'Changed dynamic'
+        self.metadata_dict['Sample2']['dna_extracted'] = 'Changed dynamic'
 
-        md_ext = pd.DataFrame.from_dict(self.metadata_dict, orient='index')
+        md_ext = pd.DataFrame.from_dict(self.metadata_dict, orient='index',
+                                        dtype=str)
 
-        md_ext['NEWCOL'] = pd.Series(['val1', 'val2', 'val3', 'val4'],
-                                     index=md_ext.index)
+        md_ext['TOT_NITRO'] = pd.Series(['val1', 'val2', 'val3', 'val4'],
+                                        index=md_ext.index)
         # Make sure adding duplicate samples raises warning
         npt.assert_warns(qdb.exceptions.QiitaDBWarning, st.extend, md_ext)
         exp_sample_ids = {"%s.Sample1" % st.id, "%s.Sample2" % st.id,
@@ -1805,74 +1670,64 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
         self.assertEqual(st._get_sample_ids(), exp_sample_ids)
         self.assertEqual(len(st), 4)
         exp_categories = {'collection_timestamp', 'description',
-                          'dna_extracted', 'host_subject_id', 'int_column',
-                          'latitude', 'longitude',
-                          'physical_specimen_location',
+                          'dna_extracted', 'host_subject_id', 'latitude',
+                          'longitude', 'physical_specimen_location',
                           'physical_specimen_remaining', 'sample_type',
-                          'scientific_name', 'str_column', 'taxon_id',
-                          'newcol'}
+                          'scientific_name', 'taxon_id', 'tot_nitro'}
         self.assertItemsEqual(st.categories(), exp_categories)
         exp_dict = {
             "%s.Sample1" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 1",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 1,
-                'latitude': 42.42,
-                'longitude': 41.41,
+                'latitude': '42.42',
+                'longitude': '41.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 1",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens',
-                'newcol': 'val1'},
+                'tot_nitro': 'val1'},
             "%s.Sample2" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 2",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 2,
-                'latitude': 4.2,
-                'longitude': 1.1,
+                'latitude': '4.2',
+                'longitude': '1.1',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 2",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens',
-                'newcol': 'val2'},
+                'tot_nitro': 'val2'},
             "%s.Sample3" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 3",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 3,
-                'latitude': 4.8,
-                'longitude': 4.41,
+                'latitude': '4.8',
+                'longitude': '4.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 3",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens',
-                'newcol': 'val3'},
+                'tot_nitro': 'val3'},
             '%s.Sample4' % st.id: {
-                'int_column': 4,
-                'str_column': 'Value for sample 4',
                 'physical_specimen_location': 'location1',
-                'physical_specimen_remaining': True,
-                'dna_extracted': True,
+                'physical_specimen_remaining': 'true',
+                'dna_extracted': 'true',
                 'sample_type': 'type1',
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'host_subject_id': 'NotIdentified',
                 'description': 'Test Sample 4',
-                'latitude': 42.42,
-                'longitude': 41.41,
-                'taxon_id': 9606,
+                'latitude': '42.42',
+                'longitude': '41.41',
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens',
-                'newcol': 'val4'}}
+                'tot_nitro': 'val4'}}
         for s_id in exp_sample_ids:
             self.assertEqual(st[s_id]._to_dict(), exp_dict[s_id])
 
@@ -1883,102 +1738,91 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
 
         self.metadata_dict['Sample4'] = {
             'physical_specimen_location': 'location1',
-            'physical_specimen_remaining': True,
-            'dna_extracted': True,
+            'physical_specimen_remaining': 'true',
+            'dna_extracted': 'true',
             'sample_type': 'type1',
-            'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+            'collection_timestamp': '2014-05-29 12:24:15',
             'host_subject_id': 'NotIdentified',
             'Description': 'Test Sample 4',
-            'str_column': 'Value for sample 4',
-            'int_column': 4,
-            'latitude': 42.42,
-            'longitude': 41.41,
-            'taxon_id': 9606,
+            'latitude': '42.42',
+            'longitude': '41.41',
+            'taxon_id': '9606',
             'scientific_name': 'homo sapiens'}
 
         self.metadata_dict['Sample1']['Description'] = 'Changed'
-        self.metadata_dict['Sample2']['str_column'] = 'Changed dynamic'
+        self.metadata_dict['Sample2']['scientific_name'] = 'Changed dynamic'
 
-        md_ext = pd.DataFrame.from_dict(self.metadata_dict, orient='index')
+        md_ext = pd.DataFrame.from_dict(self.metadata_dict, orient='index',
+                                        dtype=str)
 
-        md_ext['NEWCOL'] = pd.Series(['val1', 'val2', 'val3', 'val4'],
-                                     index=md_ext.index)
+        md_ext['TOT_NITRO'] = pd.Series(['val1', 'val2', 'val3', 'val4'],
+                                        index=md_ext.index)
 
-        npt.assert_warns(qdb.exceptions.QiitaDBWarning, st.extend, md_ext)
-        st.update(md_ext)
+        npt.assert_warns(qdb.exceptions.QiitaDBWarning, st.extend_and_update,
+                         md_ext)
         exp_sample_ids = {"%s.Sample1" % st.id, "%s.Sample2" % st.id,
                           "%s.Sample3" % st.id, "%s.Sample4" % st.id}
         self.assertEqual(st._get_sample_ids(), exp_sample_ids)
         self.assertEqual(len(st), 4)
         exp_categories = {'collection_timestamp', 'description',
-                          'dna_extracted', 'host_subject_id', 'int_column',
-                          'latitude', 'longitude',
-                          'physical_specimen_location',
+                          'dna_extracted', 'host_subject_id', 'latitude',
+                          'longitude', 'physical_specimen_location',
                           'physical_specimen_remaining', 'sample_type',
-                          'scientific_name', 'str_column', 'taxon_id',
-                          'newcol'}
+                          'scientific_name', 'taxon_id', 'tot_nitro'}
         self.assertItemsEqual(st.categories(), exp_categories)
         exp_dict = {
             "%s.Sample1" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Changed",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 1,
-                'latitude': 42.42,
-                'longitude': 41.41,
+                'latitude': '42.42',
+                'longitude': '41.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 1",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens',
-                'newcol': 'val1'},
+                'tot_nitro': 'val1'},
             "%s.Sample2" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 2",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 2,
-                'latitude': 4.2,
-                'longitude': 1.1,
+                'latitude': '4.2',
+                'longitude': '1.1',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Changed dynamic",
-                'taxon_id': 9606,
-                'scientific_name': 'homo sapiens',
-                'newcol': 'val2'},
+                'taxon_id': '9606',
+                'scientific_name': 'Changed dynamic',
+                'tot_nitro': 'val2'},
             "%s.Sample3" % st.id: {
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'description': "Test Sample 3",
-                'dna_extracted': True,
+                'dna_extracted': 'true',
                 'host_subject_id': "NotIdentified",
-                'int_column': 3,
-                'latitude': 4.8,
-                'longitude': 4.41,
+                'latitude': '4.8',
+                'longitude': '4.41',
                 'physical_specimen_location': "location1",
-                'physical_specimen_remaining': True,
+                'physical_specimen_remaining': 'true',
                 'sample_type': "type1",
-                'str_column': "Value for sample 3",
-                'taxon_id': 9606,
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens',
-                'newcol': 'val3'},
+                'tot_nitro': 'val3'},
             '%s.Sample4' % st.id: {
-                'int_column': 4,
-                'str_column': 'Value for sample 4',
                 'physical_specimen_location': 'location1',
-                'physical_specimen_remaining': True,
-                'dna_extracted': True,
+                'physical_specimen_remaining': 'true',
+                'dna_extracted': 'true',
                 'sample_type': 'type1',
-                'collection_timestamp': datetime(2014, 5, 29, 12, 24, 51),
+                'collection_timestamp': '2014-05-29 12:24:15',
                 'host_subject_id': 'NotIdentified',
                 'description': 'Test Sample 4',
-                'latitude': 42.42,
-                'longitude': 41.41,
-                'taxon_id': 9606,
+                'latitude': '42.42',
+                'longitude': '41.41',
+                'taxon_id': '9606',
                 'scientific_name': 'homo sapiens',
-                'newcol': 'val4'}}
+                'tot_nitro': 'val4'}}
         for s_id in exp_sample_ids:
             self.assertEqual(st[s_id]._to_dict(), exp_dict[s_id])
 
@@ -1987,51 +1831,52 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
             self.metadata, self.new_study)
         obs = st.to_dataframe()
 
+        new_id = self.new_study.id
         exp_dict = {
-            '2.Sample1': {'physical_specimen_location': 'location1',
-                          'physical_specimen_remaining': True,
-                          'dna_extracted': True,
-                          'sample_type': 'type1',
-                          'collection_timestamp':
-                          datetime(2014, 5, 29, 12, 24, 51),
-                          'host_subject_id': 'NotIdentified',
-                          'description': 'Test Sample 1',
-                          'str_column': 'Value for sample 1',
-                          'int_column': 1,
-                          'latitude': 42.42,
-                          'longitude': 41.41,
-                          'taxon_id': 9606,
-                          'scientific_name': 'homo sapiens'},
-            '2.Sample2': {'physical_specimen_location': 'location1',
-                          'physical_specimen_remaining': True,
-                          'dna_extracted': True,
-                          'sample_type': 'type1',
-                          'int_column': 2,
-                          'collection_timestamp':
-                          datetime(2014, 5, 29, 12, 24, 51),
-                          'host_subject_id': 'NotIdentified',
-                          'description': 'Test Sample 2',
-                          'str_column': 'Value for sample 2',
-                          'latitude': 4.2,
-                          'longitude': 1.1,
-                          'taxon_id': 9606,
-                          'scientific_name': 'homo sapiens'},
-            '2.Sample3': {'physical_specimen_location': 'location1',
-                          'physical_specimen_remaining': True,
-                          'dna_extracted': True,
-                          'sample_type': 'type1',
-                          'collection_timestamp':
-                          datetime(2014, 5, 29, 12, 24, 51),
-                          'host_subject_id': 'NotIdentified',
-                          'description': 'Test Sample 3',
-                          'str_column': 'Value for sample 3',
-                          'int_column': 3,
-                          'latitude': 4.8,
-                          'longitude': 4.41,
-                          'taxon_id': 9606,
-                          'scientific_name': 'homo sapiens'},
+            '%s.Sample1' % new_id: {
+                'physical_specimen_location': 'location1',
+                'physical_specimen_remaining': 'true',
+                'dna_extracted': 'true',
+                'sample_type': 'type1',
+                'collection_timestamp':
+                '2014-05-29 12:24:15',
+                'host_subject_id': 'NotIdentified',
+                'description': 'Test Sample 1',
+                'latitude': '42.42',
+                'longitude': '41.41',
+                'taxon_id': '9606',
+                'qiita_study_id': str(new_id),
+                'scientific_name': 'homo sapiens'},
+            '%s.Sample2' % new_id: {
+                'physical_specimen_location': 'location1',
+                'physical_specimen_remaining': 'true',
+                'dna_extracted': 'true',
+                'sample_type': 'type1',
+                'collection_timestamp':
+                '2014-05-29 12:24:15',
+                'host_subject_id': 'NotIdentified',
+                'description': 'Test Sample 2',
+                'latitude': '4.2',
+                'longitude': '1.1',
+                'taxon_id': '9606',
+                'qiita_study_id': str(new_id),
+                'scientific_name': 'homo sapiens'},
+            '%s.Sample3' % new_id: {
+                'physical_specimen_location': 'location1',
+                'physical_specimen_remaining': 'true',
+                'dna_extracted': 'true',
+                'sample_type': 'type1',
+                'collection_timestamp':
+                '2014-05-29 12:24:15',
+                'host_subject_id': 'NotIdentified',
+                'description': 'Test Sample 3',
+                'latitude': '4.8',
+                'longitude': '4.41',
+                'taxon_id': '9606',
+                'qiita_study_id': str(new_id),
+                'scientific_name': 'homo sapiens'},
             }
-        exp = pd.DataFrame.from_dict(exp_dict, orient='index')
+        exp = pd.DataFrame.from_dict(exp_dict, orient='index', dtype=str)
         exp.index.name = 'sample_id'
         obs.sort_index(axis=0, inplace=True)
         obs.sort_index(axis=1, inplace=True)
@@ -2065,21 +1910,12 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
             'water_content_soil', 'elevation', 'temp', 'tot_nitro',
             'samp_salinity', 'altitude', 'env_biome', 'country', 'ph',
             'anonymized_name', 'tot_org_carb', 'description_duplicate',
-            'env_feature', 'scientific_name'})
+            'env_feature', 'scientific_name', 'qiita_study_id'})
 
     def test_check_restrictions(self):
         obs = self.tester.check_restrictions(
             [qdb.metadata_template.constants.SAMPLE_TEMPLATE_COLUMNS['EBI']])
         self.assertEqual(obs, set([]))
-
-        del self.metadata['collection_timestamp']
-        st = npt.assert_warns(
-            qdb.exceptions.QiitaDBWarning,
-            qdb.metadata_template.sample_template.SampleTemplate.create,
-            self.metadata, self.new_study)
-        obs = st.check_restrictions(
-            [qdb.metadata_template.constants.SAMPLE_TEMPLATE_COLUMNS['EBI']])
-        self.assertEqual(obs, {'collection_timestamp'})
 
     def test_ebi_sample_accessions(self):
         obs = self.tester.ebi_sample_accessions
@@ -2201,32 +2037,206 @@ class TestSampleTemplateReadWrite(BaseTestSampleTemplate):
             st.biosample_accessions = exp_acc
         npt.assert_warns(qdb.exceptions.QiitaDBWarning, f)
 
+    def test_validate_template_warning_missing(self):
+        """Warns if the template is missing a required column"""
+        metadata_dict = {
+            'Sample1': {'physical_specimen_location': 'location1',
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
+                        'sample_type': 'type1',
+                        'host_subject_id': 'NotIdentified',
+                        'Description': 'Test Sample 1',
+                        'latitude': '42.42',
+                        'longitude': '41.41'}
+            }
+        metadata = pd.DataFrame.from_dict(metadata_dict, orient='index',
+                                          dtype=str)
+        ST = qdb.metadata_template.sample_template.SampleTemplate
+        obs = ST._clean_validate_template(metadata, 2)
+        metadata_dict = {
+            '2.Sample1': {'physical_specimen_location': 'location1',
+                          'physical_specimen_remaining': 'true',
+                          'dna_extracted': 'true',
+                          'sample_type': 'type1',
+                          'host_subject_id': 'NotIdentified',
+                          'description': 'Test Sample 1',
+                          'latitude': '42.42',
+                          'longitude': '41.41'}
+            }
+        exp = pd.DataFrame.from_dict(metadata_dict, orient='index', dtype=str)
+        obs.sort_index(axis=0, inplace=True)
+        obs.sort_index(axis=1, inplace=True)
+        exp.sort_index(axis=0, inplace=True)
+        exp.sort_index(axis=1, inplace=True)
+        assert_frame_equal(obs, exp)
+
+    def test_validate_template_warning_missing_restrictions(self):
+        del self.metadata['collection_timestamp']
+        st = npt.assert_warns(
+            qdb.exceptions.QiitaDBWarning,
+            qdb.metadata_template.sample_template.SampleTemplate.create,
+            self.metadata, self.new_study)
+        obs = st.check_restrictions(
+            [qdb.metadata_template.constants.SAMPLE_TEMPLATE_COLUMNS['EBI']])
+        self.assertEqual(obs, {'collection_timestamp'})
+
+    def test_validate_errors(self):
+        self.metadata.set_value('Sample1', 'collection_timestamp',
+                                'wrong date')
+        self.metadata.set_value('Sample2', 'latitude', 'wrong latitude')
+        self.metadata.set_value('Sample3', 'latitude', None)
+
+        with catch_warnings(record=True) as warn:
+            qdb.metadata_template.sample_template.SampleTemplate.create(
+                self.metadata, self.new_study)
+
+            # it should only return one warning
+            self.assertEqual(len(warn), 1)
+            warn = warn[0]
+            # it should be QiitaDBWarning
+            self.assertEqual(warn.category, qdb.exceptions.QiitaDBWarning)
+            # it should contain this text
+            message = str(warn.message)
+            exp_error = ('Sample "%s.Sample2", column "latitude", wrong value '
+                         '"wrong latitude"' % self.new_study.id)
+            self.assertIn(exp_error, message)
+            exp_error = ('Sample "%s.Sample1", column "collection_timestamp", '
+                         'wrong value "wrong date"' % self.new_study.id)
+            self.assertIn(exp_error, message)
+            exp_error = ('Sample "%s.Sample3", column "latitude", '
+                         'wrong value "None"' % self.new_study.id)
+            self.assertIn(exp_error, message)
+
+    def test_validate_errors_timestampA_year4digits(self):
+        self.metadata.set_value('Sample1', 'collection_timestamp',
+                                '2016-09-20 12:00')
+        self.metadata.set_value('Sample2', 'collection_timestamp',
+                                '2016-09-20 12')
+        self.metadata.set_value('Sample3', 'collection_timestamp',
+                                '2016-09-20')
+
+        with catch_warnings(record=True) as warn:
+            qdb.metadata_template.sample_template.SampleTemplate.create(
+                self.metadata, self.new_study)
+            # the warnings should be empty
+            self.assertEqual(warn, [])
+
+    def test_validate_errors_timestampA_year2digits(self):
+        self.metadata.set_value('Sample1', 'collection_timestamp',
+                                '16-09-20 12:00')
+        self.metadata.set_value('Sample2', 'collection_timestamp',
+                                '9/20/16 12')
+        self.metadata.set_value('Sample3', 'collection_timestamp',
+                                '09-20-16')
+
+        with catch_warnings(record=True) as warn:
+            st = qdb.metadata_template.sample_template.SampleTemplate.create(
+                self.metadata, self.new_study)
+            exp_message = (
+                'Some functionality will be disabled due to missing '
+                'columns:\n\t'
+                'Sample "{0}.Sample1", column "collection_timestamp", '
+                'wrong value "16-09-20 12:00";\n\t'
+                'Sample "{0}.Sample2", column "collection_timestamp", '
+                'wrong value "9/20/16 12";\n\t'
+                'Sample "{0}.Sample3", column "collection_timestamp", '
+                'wrong value "09-20-16".\n'
+                'See the Templates tutorial '
+                'for a description of these fields.'.format(st.id))
+            # warnings is a list of 1 element
+            self.assertEqual(len(warn), 1)
+            # the order might change so testing by elements
+            self.assertItemsEqual(str(warn[0].message).split('\n'),
+                                  exp_message.split('\n'))
+
+    def test_validate_errors_timestampB_year4digits(self):
+        self.metadata.set_value('Sample1', 'collection_timestamp',
+                                '2016-12')
+        self.metadata.set_value('Sample2', 'collection_timestamp',
+                                '2016')
+        with catch_warnings(record=True) as warn:
+            qdb.metadata_template.sample_template.SampleTemplate.create(
+                self.metadata, self.new_study)
+            # the warnings should be empty
+            self.assertEqual(warn, [])
+
+    def test_validate_errors_timestampB_year2digits(self):
+        self.metadata.set_value('Sample1', 'collection_timestamp',
+                                '16-12')
+        self.metadata.set_value('Sample2', 'collection_timestamp',
+                                '16')
+        with catch_warnings(record=True) as warn:
+            st = qdb.metadata_template.sample_template.SampleTemplate.create(
+                self.metadata, self.new_study)
+            exp_message = (
+                'Some functionality will be disabled due to missing '
+                'columns:\n\t'
+                'Sample "{0}.Sample1", column "collection_timestamp", wrong '
+                'value "16-12";\n\t'
+                'Sample "{0}.Sample2", column "collection_timestamp", wrong '
+                'value "16".\n'
+                'See the Templates tutorial for a description '
+                'of these fields.'.format(st.id))
+            # warnings is a list of 1 element
+            self.assertEqual(len(warn), 1)
+            self.assertEqual(str(warn[0].message), exp_message)
+
+    def test_delete_column(self):
+        st = qdb.metadata_template.sample_template.SampleTemplate.create(
+            self.metadata, self.new_study)
+        st.delete_column('dna_extracted')
+        self.assertNotIn('dna_extracted', st.categories())
+
+    def test_delete_sample(self):
+        QE = qdb.exceptions
+        st = qdb.metadata_template.sample_template.SampleTemplate(1)
+        md_dict = {
+            'Sample4': {'physical_specimen_location': 'location1',
+                        'physical_specimen_remaining': 'true',
+                        'dna_extracted': 'true',
+                        'sample_type': 'type1',
+                        'collection_timestamp': '2014-05-29 12:24:15',
+                        'host_subject_id': 'NotIdentified',
+                        'Description': 'Test Sample 4',
+                        'latitude': '42.42',
+                        'longitude': '41.41',
+                        'taxon_id': '9606',
+                        'scientific_name': 'homo sapiens'}}
+        md_ext = pd.DataFrame.from_dict(md_dict, orient='index', dtype=str)
+        npt.assert_warns(QE.QiitaDBWarning, st.extend, md_ext)
+
+        st.delete_sample('1.Sample4')
+        self.assertNotIn('1.Sample4', st.keys())
+
+        # testing errors
+        with self.assertRaises(QE.QiitaDBUnknownIDError):
+            st.delete_sample('not.existing.sample')
+
+        with self.assertRaises(QE.QiitaDBOperationNotPermittedError):
+            st.delete_sample('1.SKM5.640177')
+
+
 EXP_SAMPLE_TEMPLATE = (
     "sample_name\tcollection_timestamp\tdescription\tdna_extracted\t"
-    "host_subject_id\tint_column\tlatitude\tlongitude\t"
-    "physical_specimen_location\tphysical_specimen_remaining\tsample_type\t"
-    "scientific_name\tstr_column\ttaxon_id\n"
-    "2.Sample1\t2014-05-29 12:24:51\tTest Sample 1\tTrue\tNotIdentified\t1\t"
-    "42.42\t41.41\tlocation1\tTrue\ttype1\thomo sapiens\tValue for sample 1\t"
-    "9606\n"
-    "2.Sample2\t2014-05-29 12:24:51\tTest Sample 2\tTrue\tNotIdentified\t2\t"
-    "4.2\t1.1\tlocation1\tTrue\ttype1\thomo sapiens\tValue for sample 2\t"
-    "9606\n"
-    "2.Sample3\t2014-05-29 12:24:51\tTest Sample 3\tTrue\tNotIdentified\t3\t"
-    "4.8\t4.41\tlocation1\tTrue\ttype1\thomo sapiens\tValue for sample 3\t"
-    "9606\n")
+    "host_subject_id\tlatitude\tlongitude\tphysical_specimen_location\t"
+    "physical_specimen_remaining\tqiita_study_id\tsample_type\t"
+    "scientific_name\ttaxon_id\n"
+    "{0}.Sample1\t2014-05-29 12:24:15\tTest Sample 1\ttrue\tNotIdentified\t"
+    "42.42\t41.41\tlocation1\ttrue\t{0}\ttype1\thomo sapiens\t9606\n"
+    "{0}.Sample2\t2014-05-29 12:24:15\tTest Sample 2\ttrue\tNotIdentified\t"
+    "4.2\t1.1\tlocation1\ttrue\t{0}\ttype1\thomo sapiens\t9606\n"
+    "{0}.Sample3\t2014-05-29 12:24:15\tTest Sample 3\ttrue\tNotIdentified\t"
+    "4.8\t4.41\tlocation1\ttrue\t{0}\ttype1\thomo sapiens\t9606\n")
 
 EXP_SAMPLE_TEMPLATE_FEWER_SAMPLES = (
     "sample_name\tcollection_timestamp\tdescription\tdna_extracted\t"
-    "host_subject_id\tint_column\tlatitude\tlongitude\t"
-    "physical_specimen_location\tphysical_specimen_remaining\tsample_type\t"
-    "scientific_name\tstr_column\ttaxon_id\n"
-    "2.Sample1\t2014-05-29 12:24:51\tTest Sample 1\tTrue\tNotIdentified\t1\t"
-    "42.42\t41.41\tlocation1\tTrue\ttype1\thomo sapiens\tValue for sample 1\t"
-    "9606\n"
-    "2.Sample3\t2014-05-29 12:24:51\tTest Sample 3\tTrue\tNotIdentified\t3\t"
-    "4.8\t4.41\tlocation1\tTrue\ttype1\thomo sapiens\tValue for sample 3\t"
-    "9606\n")
+    "host_subject_id\tlatitude\tlongitude\tphysical_specimen_location\t"
+    "physical_specimen_remaining\tqiita_study_id\tsample_type\t"
+    "scientific_name\ttaxon_id\n"
+    "{0}.Sample1\t2014-05-29 12:24:15\tTest Sample 1\ttrue\tNotIdentified\t"
+    "42.42\t41.41\tlocation1\ttrue\t{0}\ttype1\thomo sapiens\t9606\n"
+    "{0}.Sample3\t2014-05-29 12:24:15\tTest Sample 3\ttrue\tNotIdentified\t"
+    "4.8\t4.41\tlocation1\ttrue\t{0}\ttype1\thomo sapiens\t9606\n")
 
 
 if __name__ == '__main__':
